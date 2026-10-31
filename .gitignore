@@ -52,3 +52,4 @@ node_modules/
 __pycache__/
 .DS_Store
 .bak/
+.git.old-*

@@ -1,6 +1,0 @@
-0000000000000000000000000000000000000000 f0f5826e2a5528abe48db4a06c04072b2763e2d2 yichen <yichen.qu@outlook.com> 1792069231 +0800	commit (initial): 初始提交：home-chat 完整项目
-f0f5826e2a5528abe48db4a06c04072b2763e2d2 50ded233fd7862df978327c6568421f815ce97c6 yichen <yichen.qu@outlook.com> 1792069941 +0800	commit: 修正 .gitignore：排除用户数据和证书
-50ded233fd7862df978327c6568421f815ce97c6 f96a5ffd20d3b5e07a017ab868196f7726151870 yichen <yichen.qu@outlook.com> 1792070061 +0800	commit: 清理测试文件和备份
-f96a5ffd20d3b5e07a017ab868196f7726151870 2e4ec018ba95cc230856f154e7f79a4482766704 yichen <yichen.qu@outlook.com> 1792070363 +0800	commit: 把 codepilot-test.txt 纳入 git 跟踪
-2e4ec018ba95cc230856f154e7f79a4482766704 931e2f15a0719e9aafb2b70603d7feef3c29902c yichen <yichen.qu@outlook.com> 1792070477 +0800	commit: 手动测试
-931e2f15a0719e9aafb2b70603d7feef3c29902c 9a9fbf0f3dd5d2685cd6ce911f516c96bd305f8a yichen <yichen.qu@outlook.com> 1792070544 +0800	commit: 准备修改 codepilot-test.txt 为版本8
