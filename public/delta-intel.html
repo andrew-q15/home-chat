@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>🪖 三角洲情报站</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0f0a; color: #a5d6ff; font-family: ui-monospace, monospace; padding: 20px; min-height: 100vh; }
+  .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #2ecc71; padding-bottom: 15px; margin-bottom: 20px; }
+  .header h1 { color: #2ecc71; font-size: 22px; } .header a { color: #888; text-decoration: none; }
+  .input-box { background: #111; border: 1px solid #333; padding: 15px; border-radius: 8px; margin-bottom: 20px; max-width: 800px; }
+  textarea { width: 100%; height: 100px; background: #000; border: 1px solid #2ecc71; color: #a5d6ff; padding: 10px; font-family: inherit; outline: none; resize: vertical; }
+  button { margin-top: 10px; padding: 10px 20px; background: #2ecc71; color: #000; border: none; font-weight: bold; cursor: pointer; border-radius: 4px; }
+  button:disabled { background: #333; color: #666; cursor: not-allowed; }
+  .result { background: #111; border-left: 4px solid #f39c12; padding: 15px; border-radius: 4px; margin-top: 20px; display: none; max-width: 800px; }
+  .result h3 { color: #f39c12; margin-bottom: 10px; font-size: 16px; }
+  .result pre { white-space: pre-wrap; word-wrap: break-word; line-height: 1.6; color: #eee; font-family: inherit; }
+  .raw-text { font-size: 12px; color: #666; margin-top: 15px; border-top: 1px dashed #333; padding-top: 10px; }
+</style>
+</head>
+<body>
+<div class="header"><h1>🪖 三角洲战术情报站</h1><a href="/">← 返回基地</a></div>
+<div class="input-box">
+  <p style="font-size:13px; color:#888; margin-bottom:8px;">你可以留空让 AI 自动抓取最新公告，或者把官网更新内容粘贴到这里让 AI 分析：</p>
+  <textarea id="manual-text" placeholder="例如：新赛季群星上线，出了新干员液氮...（留空则自动抓取）"></textarea>
+  <button id="analyze-btn" onclick="__analyze()">开始 AI 战术分析</button>
+</div>
+<div class="result" id="result-box"><h3>🎯 AI 战术分析报告</h3><pre id="analysis-text"></pre><div class="raw-text" id="raw-text"></div></div>
+<script>
+let myToken = localStorage.getItem('token');
+fetch('/api/delta/whitelist', { headers: { 'Authorization': myToken } }).then(r=>r.json()).then(d => { if (!d.ok || !d.allowed) { document.body.innerHTML = '<h1 style="text-align:center; margin-top:50px;">无权访问该情报站</h1>'; } });
+async function __analyze() {
+  const btn = document.getElementById('analyze-btn'); const manual = document.getElementById('manual-text').value;
+  btn.disabled = true; btn.textContent = 'AI 分析中...'; document.getElementById('result-box').style.display = 'none';
+  try {
+    const res = await fetch('/api/delta/analyze', { method: 'POST', headers: { 'Authorization': myToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ manualText: manual }) });
+    const d = await res.json();
+    if (d.ok) { document.getElementById('result-box').style.display = 'block'; document.getElementById('analysis-text').textContent = d.analysis; document.getElementById('raw-text').textContent = '原始情报来源：\n' + d.raw; }
+    else alert(d.msg);
+  } catch(e) { alert('网络错误'); } finally { btn.disabled = false; btn.textContent = '开始 AI 战术分析'; }
+}
+</script>
+</body>
+</html>

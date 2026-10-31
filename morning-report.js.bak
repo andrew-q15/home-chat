@@ -1,0 +1,158 @@
+// 每日早报服务
+const config = require('./config');
+
+const CHAT_SERVER = 'http://localhost:3000';
+const CHANNEL = '日常';
+const DEVICE_KEY = config.DEVICE_API_KEY;
+
+// 西安经纬度（想换城市自己改）
+const LAT = 34.34;
+const LON = 108.94;
+
+// 今日诗词（免费公开 API，无需 key）
+async function getPoem() {
+  try {
+    const res = await fetch('https://v2.jinrishici.com/one.json');
+    const data = await res.json();
+    return data?.data?.content || '';
+  } catch {
+    return '';
+  }
+}
+
+// 天气（open-meteo，免费，无需 key）
+async function getWeather() {
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}` +
+                `&current=temperature_2m,weather_code` +
+                `&daily=temperature_2m_max,temperature_2m_min` +
+                `&timezone=Asia/Shanghai&forecast_days=1`;
+    const res = await fetch(url);
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+// 天气代码转文字
+function weatherText(code) {
+  const map = {
+    0:'晴', 1:'晴', 2:'多云', 3:'阴',
+    45:'雾', 48:'雾',
+    51:'小雨', 53:'雨', 55:'大雨',
+    61:'小雨', 63:'雨', 65:'大雨',
+    71:'小雪', 73:'雪', 75:'大雪',
+    80:'阵雨', 81:'阵雨', 82:'暴雨',
+    95:'雷雨', 96:'雷雨', 99:'雷雨',
+  };
+  return map[code] || '未知';
+}
+
+// 让 AI 合成早报
+async function generateReport() {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('zh-CN', {
+    year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
+  });
+
+  const poem = await getPoem();
+  const weather = await getWeather();
+
+  let weatherLine = '';
+  if (weather?.current) {
+    const cur = weather.current.temperature_2m;
+    const max = weather.daily?.temperature_2m_max?.[0];
+    const min = weather.daily?.temperature_2m_min?.[0];
+    weatherLine = `今日天气：${weatherText(weather.current.weather_code)}，${cur}°C（${min}~${max}°C）`;
+  }
+
+  const prompt = [
+    `今天是 ${dateStr}。请生成一份简短的早报，包含：`,
+    `1. 一句温暖的问候`,
+    `2. 一句鼓励的话`,
+    `3. 一句今日诗词：${poem}`,
+    weatherLine ? `4. ${weatherLine}` : '',
+    ``,
+    `要求：简洁、温暖，总字数不超过 100 字，中文。不要输出思考过程。`,
+  ].filter(Boolean).join('\n');
+
+  const res = await fetch('http://localhost:1234/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: config.AI1.model,
+      messages: [
+        { role: 'system', content: '你是聊天室的早报助手，负责每天早上发布早报。' },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.8,
+      max_tokens: 400,
+      chat_template_kwargs: { enable_thinking: false },
+    }),
+  });
+  const data = await res.json();
+  let content = (data.choices?.[0]?.message?.content || '').trim();
+
+  // 清理思考标记
+  const markers = ['</think', '</reasoning', '[/think]'];
+  for (const m of markers) {
+    const idx = content.toLowerCase().indexOf(m.toLowerCase());
+    if (idx !== -1) content = content.slice(0, idx).trim();
+  }
+
+  return content;
+}
+
+// 发到聊天室
+async function sendReport() {
+  try {
+    const text = await generateReport();
+    if (!text) {
+      console.log(`[${new Date().toLocaleString()}] 早报内容为空，跳过`);
+      return;
+    }
+    const res = await fetch(`${CHAT_SERVER}/api/device/say`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key: DEVICE_KEY,
+        channel: CHANNEL,
+        name: 'AI-1',
+        text: text,
+      }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      console.log(`[${new Date().toLocaleString()}] 早报已发送到 #${CHANNEL}`);
+    } else {
+      console.error('发送失败:', data.msg);
+    }
+  } catch (err) {
+    console.error('早报发送出错:', err.message);
+  }
+}
+
+// 定时：每天早上 7:00
+let lastReportDate = null;
+setInterval(() => {
+  const now = new Date();
+  const today = now.toDateString();
+  if (now.getHours() === 7 && now.getMinutes() === 0 && lastReportDate !== today) {
+    lastReportDate = today;
+    sendReport();
+  }
+}, 30 * 1000); // 每 30 秒检查一次
+
+console.log('');
+console.log('========================================');
+console.log('  早报服务已启动');
+console.log(`  每天早上 7:00 发送到 #${CHANNEL}`);
+console.log(`  目标聊天室: ${CHAT_SERVER}`);
+console.log('');
+console.log('  想立即测试一次，另开终端跑：');
+console.log('  curl -X POST http://localhost:3000/api/device/say \\');
+console.log('    -H "Content-Type: application/json" \\');
+console.log(`    -d '{"key":"${DEVICE_KEY}","channel":"${CHANNEL}","name":"测试","text":"测试消息"}'`);
+console.log('========================================');
+console.log('');
+setTimeout(sendReport, 1500);

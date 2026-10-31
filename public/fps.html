@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>🎯 食材峡谷</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; touch-action: none; }
+  body { background: #000; color: #fff; font-family: sans-serif; overflow: hidden; height: 100vh; }
+  canvas { display: block; width: 100%; height: 100%; }
+  
+  #ui {
+    position: fixed; inset: 0; pointer-events: none;
+    display: flex; flex-direction: column; justify-content: space-between; padding: 20px;
+  }
+  .top { display: flex; justify-content: space-between; font-size: 18px; font-weight: bold; text-shadow: 1px 1px 2px #000; }
+  .crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; border: 1px solid #fff; transform: translate(-50%, -50%); border-radius: 50%; opacity: 0.5; }
+  
+  #prompt {
+    position: absolute; bottom: 30%; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 8px;
+    border: 1px solid #fff; display: none; text-align: center;
+  }
+  #prompt button { padding: 8px 16px; margin-top: 10px; background: #f1c40f; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
+  
+  #loot-modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: none;
+    align-items: center; justify-content: center; z-index: 100; pointer-events: auto;
+  }
+  .loot-box { background: #2c3e50; padding: 30px; border-radius: 12px; text-align: center; width: 80%; max-width: 300px; }
+  .loot-box h2 { color: #f1c40f; margin-bottom: 20px; }
+  .loot-item { font-size: 24px; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui">
+  <div class="top">
+    <span>🔫 探索中...</span>
+    <span id="balance">余额: -- 🍊</span>
+  </div>
+  <div class="crosshair"></div>
+  <div id="prompt">
+    <div>发现物资箱！</div>
+    <button id="search-btn">搜索 (点击此处)</button>
+  </div>
+</div>
+
+<div id="loot-modal">
+  <div class="loot-box">
+    <h2>🎉 搜刮成功</h2>
+    <div id="loot-content"></div>
+    <button id="close-loot" style="margin-top:20px;padding:10px 20px;background:#2ecc71;border:none;border-radius:6px;color:#fff;font-weight:bold;">收下并继续</button>
+  </div>
+</div>
+
+<script>
+  const token = localStorage.getItem('token');
+  if (!token) location.href = '/';
+
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  let W, H;
+  function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+  window.addEventListener('resize', resize); resize();
+
+  // 极简伪3D射线投射引擎
+  let player = { x: 1.5, y: 1.5, angle: 0 };  // 出生在左上角空地（(5,5) 是墙）
+
+  // ===== 键盘移动 =====
+  var keys = {};
+  window.addEventListener('keydown', function(e){
+    keys[e.code] = true;
+    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+  });
+  window.addEventListener('keyup', function(e){
+    keys[e.code] = false;
+  });
+
+  function isWall(x, y) {
+    var gx = Math.floor(x), gy = Math.floor(y);
+    if (!map[gy] || map[gy][gx] === undefined) return true;
+    return map[gy][gx] === 1;
+  }
+
+  function updatePlayer() {
+    var speed = 0.08;
+    var turn = 0.04;
+    var dx = 0, dy = 0;
+    // 前后（W/S 或 ↑/↓）
+    if (keys['KeyW'] || keys['ArrowUp'])    { dx += Math.cos(player.angle) * speed; dy += Math.sin(player.angle) * speed; }
+    if (keys['KeyS'] || keys['ArrowDown'])  { dx -= Math.cos(player.angle) * speed; dy -= Math.sin(player.angle) * speed; }
+    // 左右平移（A/D）
+    if (keys['KeyA']) { dx += Math.cos(player.angle - Math.PI/2) * speed; dy += Math.sin(player.angle - Math.PI/2) * speed; }
+    if (keys['KeyD']) { dx += Math.cos(player.angle + Math.PI/2) * speed; dy += Math.sin(player.angle + Math.PI/2) * speed; }
+    // 左右转（←/→）
+    if (keys['ArrowLeft'])  player.angle -= turn;
+    if (keys['ArrowRight']) player.angle += turn;
+    // 碰撞检测：分轴移动，可以贴墙滑
+    if (dx !== 0 && !isWall(player.x + dx, player.y)) player.x += dx;
+    if (dy !== 0 && !isWall(player.x, player.y + dy)) player.y += dy;
+  }
+  const map = [
+    [1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,1,0,0,0,0,1],
+    [1,0,1,0,1,0,1,1,0,1],
+    [1,0,1,0,0,0,1,0,0,1],
+    [1,0,0,0,1,0,0,0,1,1],
+    [1,1,1,0,1,1,1,0,0,1],
+    [1,0,0,0,0,0,1,0,1,1],
+    [1,0,1,1,1,0,0,0,0,1],
+    [1,0,0,0,1,1,1,1,0,1],
+    [1,1,1,1,1,1,1,1,1,1]
+  ];
+  
+  // 随机生成一个物资点
+  function randomEmptyCell() {
+    for (var i = 0; i < 200; i++) {
+      var x = Math.floor(Math.random() * 8) + 1;
+      var y = Math.floor(Math.random() * 8) + 1;
+      if (!isWall(x, y) && !(x === Math.floor(player.x) && y === Math.floor(player.y))) {
+        return { x: x, y: y };
+      }
+    }
+    return { x: 1, y: 1 };  // 兜底
+  }
+
+  let lootTarget = randomEmptyCell(); lootTarget.found = false;
+
+  const FOV = Math.PI / 3;
+  const NUM_RAYS = 120; // 分辨率越低越流畅，网页端够了
+
+  function draw() {
+    updatePlayer();
+    ctx.fillStyle = '#111'; ctx.fillRect(0, 0, W, H);
+    
+    // 天花板和地板
+    ctx.fillStyle = '#222'; ctx.fillRect(0, 0, W, H/2);
+    ctx.fillStyle = '#333'; ctx.fillRect(0, H/2, W, H/2);
+
+    const colWidth = W / NUM_RAYS;
+    const rayAngleStep = FOV / NUM_RAYS;
+
+    let targetOnScreen = false;
+
+    for (let i = 0; i < NUM_RAYS; i++) {
+      let rayAngle = player.angle - FOV / 2 + i * rayAngleStep;
+      
+      // DDA 算法投射
+      let distance = 0;
+      let hitWall = false;
+      let rayX = player.x, rayY = player.y;
+      let stepX = Math.cos(rayAngle) * 0.05;
+      let stepY = Math.sin(rayAngle) * 0.05;
+
+      while (!hitWall && distance < 20) {
+        rayX += stepX; rayY += stepY; distance += 0.05;
+        if (map[Math.floor(rayY)] && map[Math.floor(rayY)][Math.floor(rayX)] === 1) hitWall = true;
+      }
+
+      // 画墙
+      let wallHeight = H / (distance * Math.cos(rayAngle - player.angle));
+      let offset = H / 2 - wallHeight / 2;
+      let brightness = Math.max(50, 255 - distance * 20);
+      ctx.fillStyle = `rgb(${brightness},${brightness},${brightness})`;
+      ctx.fillRect(i * colWidth, offset, colWidth + 1, wallHeight);
+
+      // 检查这个射线是否打中了物资箱
+      let distToTarget = Math.sqrt(Math.pow(rayX - lootTarget.x, 2) + Math.pow(rayY - lootTarget.y, 2));
+      if (!lootTarget.found && Math.abs(distance - Math.sqrt(Math.pow(lootTarget.x - player.x, 2) + Math.pow(lootTarget.y - player.y, 2))) < 0.5) {
+         // 粗略判定视线是否经过目标附近
+         let angleToTarget = Math.atan2(lootTarget.y - player.y, lootTarget.x - player.x);
+         let diff = Math.abs(angleToTarget - rayAngle);
+         if (diff < 0.1) targetOnScreen = true;
+      }
+    }
+
+    // 如果视线正对物资箱，画个方块在上面
+    if (targetOnScreen && !lootTarget.found) {
+       ctx.fillStyle = '#f1c40f';
+       ctx.fillRect(W/2 - 20, H/2 - 20, 40, 40);
+       document.getElementById('prompt').style.display = 'block';
+    } else {
+       document.getElementById('prompt').style.display = 'none';
+    }
+
+    requestAnimationFrame(draw);
+  }
+
+  // 滑动控制
+  let isDragging = false, lastX = 0;
+  canvas.addEventListener('mousedown', e => { isDragging = true; lastX = e.clientX; });
+  window.addEventListener('mouseup', () => isDragging = false);
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    player.angle += (e.clientX - lastX) * 0.005;
+    lastX = e.clientX;
+  });
+
+  canvas.addEventListener('touchstart', e => { isDragging = true; lastX = e.touches[0].clientX; });
+  window.addEventListener('touchend', () => isDragging = false);
+  window.addEventListener('touchmove', e => {
+    if (!isDragging) return;
+    player.angle += (e.touches[0].clientX - lastX) * 0.005;
+    lastX = e.touches[0].clientX;
+  });
+
+  // 搜索逻辑
+  document.getElementById('search-btn').onclick = function() {
+    if (lootTarget.found) return;
+    lootTarget.found = true;
+    
+    // 假装请求后台
+    fetch('/api/food/loot', {
+      method: 'POST',
+      headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cost: 100 })
+    }).then(r => r.json()).then(d => {
+      if (d.ok) {
+        document.getElementById('prompt').style.display = 'none';
+        let modal = document.getElementById('loot-modal');
+        let content = document.getElementById('loot-content');
+        modal.style.display = 'flex';
+        content.innerHTML = `<div class="loot-item">${d.emoji} ${d.name}</div><div>已存入食材库</div>`;
+      } else {
+        alert(d.msg);
+      }
+    });
+  };
+
+  document.getElementById('close-loot').onclick = function() {
+    document.getElementById('loot-modal').style.display = 'none';
+    // 重新生成位置继续摸
+    var cell = randomEmptyCell();
+    lootTarget = { x: cell.x, y: cell.y, found: false };
+    document.getElementById('balance').textContent = '余额: 已更新 🍊';
+  };
+
+  draw();
+</script>
+</body>
+</html>

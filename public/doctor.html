@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🧠 龙虾 AI 技能中心</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0d1117; color: #c9d1d9; font-family: ui-monospace, Menlo, monospace; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+  .box { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 30px; width: 100%; max-width: 600px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+  .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 15px; margin-bottom: 20px; }
+  .header h1 { color: #58a6ff; font-size: 20px; }
+  .header a { color: #8b949e; text-decoration: none; font-size: 14px; }
+  .upload-zone { border: 2px dashed #30363d; border-radius: 8px; padding: 30px 20px; text-align: center; cursor: pointer; transition: 0.2s; margin-bottom: 20px; }
+  .upload-zone:hover { border-color: #58a6ff; background: rgba(88,166,255,0.05); }
+  input[type="file"] { display: none; }
+  .file-list { list-style: none; margin-bottom: 20px; max-height: 150px; overflow-y: auto; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; }
+  .file-list li { padding: 8px 12px; border-bottom: 1px solid #30363d; font-size: 13px; display: flex; justify-content: space-between; }
+  .file-list li:last-child { border-bottom: none; }
+  button { width: 100%; padding: 12px; background: #238636; color: #fff; border: none; border-radius: 6px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s; }
+  button:hover { background: #2ea043; }
+  button:disabled { background: #21262d; color: #8b949e; cursor: not-allowed; }
+  .result-box { display: none; margin-top: 20px; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 15px; }
+  .result-box h3 { color: #58a6ff; margin-bottom: 10px; font-size: 16px; }
+  .result-box pre { white-space: pre-wrap; color: #e6edf3; font-size: 14px; line-height: 1.5; margin-bottom: 15px; }
+  .download-btn { background: #58a6ff; color: #fff; text-decoration: none; display: block; text-align: center; padding: 10px; border-radius: 6px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="header">
+    <h1>🧠 龙虾 AI 技能中心</h1>
+    <a href="/">← 返回大厅</a>
+  </div>
+  <p style="color:#8b949e; font-size:14px; margin-bottom:15px;">欢迎来到龙虾技能中心！请上传需要分析的文件（支持代码、Word、Excel、PDF等，最多 10 个）。</p>
+  <div class="upload-zone" onclick="document.getElementById('file-input').click()">
+    <p style="font-size:30px;">📁</p>
+    <p>点击选择文件 (支持多格式，多选)</p>
+  </div>
+  <input type="file" id="file-input" multiple onchange="__handleFiles(this.files)">
+  <ul class="file-list" id="file-list"></ul>
+  
+  <div style="margin-bottom: 20px;">
+    <input type="text" id="custom-prompt" placeholder="你想让龙虾干嘛？(留空默认全局找Bug)" style="width: 100%; padding: 12px; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; color: #fff; font-family: inherit; outline: none;">
+  </div>
+
+  <button id="btn-analyze" onclick="__analyze()" disabled>使用技能：全文件深度诊断</button>
+  <div class="result-box" id="result-box">
+    <h3>🤖 技能运行报告</h3>
+    <pre id="analysis-text"></pre>
+    <a href="#" id="download-link" class="download-btn" style="display:none;">📥 下载修复后的文件</a>
+  </div>
+</div>
+<script>
+let currentFiles = [];
+const myToken = localStorage.getItem('token');
+function __handleFiles(files) {
+  if (!files.length) return;
+  if (files.length > 10) { alert('一次最多只能传 10 个文件哦！'); currentFiles = Array.from(files).slice(0, 10); } else { currentFiles = Array.from(files); }
+  document.getElementById('file-list').innerHTML = currentFiles.map(f => `<li><span>${f.name}</span><span>${(f.size/1024).toFixed(1)} KB</span></li>`).join('');
+  document.getElementById('btn-analyze').disabled = false;
+}
+async function __analyze() {
+  if (!currentFiles.length) return;
+  if (!confirm('🧠 发动【全文件深度诊断】技能需要消耗 10 个橘子，确定要同意并支付吗？')) return;
+  
+  const btn = document.getElementById('btn-analyze');
+  btn.disabled = true; btn.innerText = '龙虾正在发动技能中...'; document.getElementById('result-box').style.display = 'none';
+  const fd = new FormData();
+  currentFiles.forEach(f => fd.append('files', f));
+  fd.append('prompt', document.getElementById('custom-prompt').value.trim());
+  try {
+    const res = await fetch('/api/doctor/upload-multi', { method: 'POST', headers: { 'Authorization': myToken }, body: fd });
+    const d = await res.json();
+    if (d.ok) {
+      document.getElementById('result-box').style.display = 'block';
+      document.getElementById('analysis-text').innerText = d.analysis;
+      if (d.downloadUrl) { const dl = document.getElementById('download-link'); dl.href = d.downloadUrl; dl.style.display = 'block'; }
+    } else { alert('诊断失败: ' + d.msg); }
+  } catch(e) { alert('网络错误'); } finally { btn.disabled = false; btn.innerText = '使用技能：全文件深度诊断'; }
+}
+</script>
+</body>
+</html>

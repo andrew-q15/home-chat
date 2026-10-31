@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📖 小说中心</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #f4f6f9; font-family: -apple-system, sans-serif; padding: 16px; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .header h1 { font-size: 20px; color: #333; }
+  .header a { color: #666; text-decoration: none; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .card { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: flex; flex-direction: column; }
+  .card h2 { font-size: 18px; color: #333; margin-bottom: 8px; cursor: pointer; }
+  .meta { font-size: 12px; color: #999; margin-bottom: 12px; display: flex; justify-content: space-between; }
+  .content-preview { font-size: 14px; color: #555; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 16px; flex: 1; }
+  .actions { display: flex; gap: 10px; align-items: center; border-top: 1px solid #eee; padding-top: 12px; }
+  .btn { padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: bold; background: #f0f0f0; color: #333; }
+  .btn-like.active { color: #ff2442; background: #ffe5e9; }
+  .btn-coin { background: #ffd700; color: #b8860b; }
+  .coin-input { width: 50px; padding: 6px; border: 1px solid #ddd; border-radius: 6px; outline: none; }
+  #read-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center; z-index: 999; padding: 16px; }
+  #read-box { background: #fff; border-radius: 12px; width: 100%; max-width: 700px; height: 85vh; display: flex; flex-direction: column; overflow: hidden; }
+  .read-header { padding: 16px 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+  .read-body { padding: 20px; overflow-y: auto; font-size: 16px; line-height: 1.8; color: #333; white-space: pre-wrap; flex: 1; }
+</style>
+</head>
+<body>
+<div class="header"><h1>📖 小说中心</h1><a href="/">← 返回聊天室</a></div>
+<div class="grid" id="grid"></div>
+<div id="read-modal"><div id="read-box"><div class="read-header"><h2 id="read-title"></h2><button onclick="document.getElementById('read-modal').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;">✕</button></div><div class="read-body" id="read-content"></div></div></div>
+<script>
+let myToken = localStorage.getItem('token');
+let myName = localStorage.getItem('username') || '';
+let published = [];
+fetch('/api/writings', { headers: { 'Authorization': myToken } }).then(r=>r.json()).then(d => { if (d.ok) { published = d.published; renderGrid(); } });
+function renderGrid() {
+  const grid = document.getElementById('grid');
+  if (published.length === 0) { grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#999;">还没有作品</div>'; return; }
+  grid.innerHTML = published.map(p => {
+    const liked = p.likes && p.likes.includes(myName);
+    const totalCoins = p.coins ? p.coins.reduce((s, c) => s + c.amount, 0) : 0;
+    return `<div class="card"><h2 onclick="__read('${p.id}')">${p.title || '无标题'}</h2><div class="meta"><span>作者：${p.authorName}</span><span>${p.wordCount} 字</span></div><div class="content-preview">${p.content}</div><div class="actions"><button class="btn btn-like ${liked ? 'active' : ''}" onclick="__like('${p.id}')">${liked ? '❤️' : '🤍'} 点赞 ${p.likes ? p.likes.length : 0}</button><div style="flex:1"></div><span style="font-size:12px;color:#e67e22;font-weight:bold;">获币 ${totalCoins} 🍊</span><input type="number" class="coin-input" id="coin-${p.id}" value="10"><button class="btn btn-coin" onclick="__coin('${p.id}')">投币</button></div></div>`;
+  }).join('');
+}
+window.__read = function(id) { const p = published.find(x => x.id === id); if (!p) return; document.getElementById('read-title').textContent = p.title; document.getElementById('read-content').textContent = p.content; document.getElementById('read-modal').style.display = 'flex'; };
+window.__like = function(id) { fetch('/api/writings/' + id + '/like', { method: 'POST', headers: { 'Authorization': myToken } }).then(r=>r.json()).then(d => { if (d.ok) { const p = published.find(x => x.id === id); if (p) p.likes = d.likes > (p.likes ? p.likes.length : 0) ? [...(p.likes||[]), myName] : (p.likes||[]).filter(u => u !== myName); renderGrid(); } }); };
+window.__coin = function(id) { const amt = Number(document.getElementById('coin-' + id).value); if (!amt || amt <= 0) return alert('输入正确橘子数'); fetch('/api/writings/' + id + '/coin', { method: 'POST', headers: { 'Authorization': myToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt }) }).then(r=>r.json()).then(d => { if (d.ok) { alert('投币成功！'); location.reload(); } else alert(d.msg); }); };
+</script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🏆 橘子成就馆</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: linear-gradient(160deg, #1a1a2e, #16213e); color: #e2e8f0; font-family: -apple-system, "PingFang SC", sans-serif; min-height: 100vh; padding: 20px; }
+  .header { max-width: 700px; margin: 0 auto 20px; display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { color: #ffd54f; font-size: 22px; }
+  .header a { color: #94a3b8; text-decoration: none; font-size: 14px; }
+  .tabs { max-width: 700px; margin: 0 auto 20px; display: flex; gap: 8px; }
+  .tab { flex: 1; padding: 12px; text-align: center; background: #1e293b; border: 1px solid #334155; border-radius: 10px; cursor: pointer; font-size: 15px; font-weight: 600; color: #94a3b8; transition: .2s; }
+  .tab.active { background: #ffd54f; color: #1a1a2e; border-color: #ffd54f; }
+  .container { max-width: 700px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .ach-card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 16px; position: relative; transition: .2s; }
+  .ach-card.unlocked { border-color: #ffd54f; box-shadow: 0 0 20px rgba(255,213,79,.2); }
+  .ach-card.locked { opacity: .5; filter: grayscale(1); }
+  .ach-card .top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .ach-card .emoji { font-size: 32px; }
+  .ach-card .name { font-size: 15px; font-weight: 700; color: #fff; flex: 1; }
+  .ach-card .level-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 700; }
+  .ach-card .desc { font-size: 12px; color: #94a3b8; line-height: 1.5; margin-bottom: 8px; }
+  .ach-card .progress { height: 6px; background: #0f172a; border-radius: 3px; overflow: hidden; margin-bottom: 6px; }
+  .ach-card .progress-bar { height: 100%; background: linear-gradient(90deg, #ffd54f, #ff9800); transition: width .3s; }
+  .ach-card .progress-text { font-size: 11px; color: #64748b; display: flex; justify-content: space-between; }
+  .ach-card .holders { margin-top: 10px; font-size: 11px; color: #94a3b8; }
+  .ach-card .holders .holder { display: inline-block; margin-right: 6px; padding: 1px 6px; background: #0f172a; border-radius: 6px; }
+  .empty { text-align: center; color: #64748b; padding: 40px; grid-column: 1/-1; }
+  .level-legend { max-width: 700px; margin: 0 auto 16px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; font-size: 12px; }
+  .level-legend span { padding: 4px 10px; border-radius: 10px; background: #1e293b; border: 1px solid #334155; }
+  #toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #ffd54f; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #ffd54f; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="header"><h1>🏆 橘子成就馆</h1><a href="/">← 返回聊天室</a></div>
+<div class="level-legend" id="legend"></div>
+<div class="tabs">
+  <div class="tab active" onclick="__switchTab('mine')">我的成就</div>
+  <div class="tab" onclick="__switchTab('all')">全站展览</div>
+</div>
+<div class="container" id="list">加载中...</div>
+<div id="toast"></div>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const token = localStorage.getItem('token');
+if (!token) location.href = '/';
+let currentTab = 'mine';
+let LEVELS = [];
+function toast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500); }
+window.__switchTab = function(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach((el, i) => el.classList.toggle('active', (i === 0 && tab === 'mine') || (i === 1 && tab === 'all')));
+  load();
+};
+function renderLegend() {
+  if (!LEVELS.length) return;
+  document.getElementById('legend').innerHTML = LEVELS.map(l => '<span style="color:' + l.color + '">' + l.emoji + ' ' + l.name + '</span>').join('');
+}
+async function load() {
+  const list = document.getElementById('list');
+  list.innerHTML = '加载中...';
+  const url = currentTab === 'mine' ? '/api/achievements/mine' : '/api/achievements/all';
+  try {
+    const d = await fetch(url, { headers: { Authorization: token } }).then(r => r.json());
+    if (!d.ok) { list.innerHTML = '<div class="empty">加载失败</div>'; return; }
+    LEVELS = d.levels || [];
+    renderLegend();
+    if (!d.achievements.length) { list.innerHTML = '<div class="empty">还没有成就</div>'; return; }
+    list.innerHTML = d.achievements.map(a => {
+      if (currentTab === 'mine') {
+        const unlocked = a.levelIdx >= 0;
+        const cls = unlocked ? 'unlocked' : 'locked';
+        const lv = a.level ? a.level : null;
+        const badge = lv ? '<span class="level-badge" style="background:' + lv.color + ';color:#000">' + lv.emoji + ' ' + lv.name + '</span>' : '<span class="level-badge" style="background:#334155;color:#94a3b8">未解锁</span>';
+        // 进度
+        let progressPct = 0, progressText = '';
+        if (a.levelIdx >= 4) {
+          progressPct = 100; progressText = '<span>已满级</span><span>' + a.currentValue + '</span>';
+        } else if (a.nextThreshold) {
+          progressPct = Math.min(100, Math.round(a.currentValue / a.nextThreshold * 100));
+          progressText = '<span>' + a.currentValue + ' / ' + a.nextThreshold + '</span><span>' + progressPct + '%</span>';
+        }
+        const targetVal = a.levelIdx < 4 && a.nextThreshold ? a.nextThreshold : a.thresholds[4];
+        const descWithTarget = a.desc + ' ' + targetVal;
+        return '<div class="ach-card ' + cls + '"><div class="top"><span class="emoji">' + a.emoji + '</span><span class="name">' + a.name + '</span>' + badge + '</div><div class="desc">' + descWithTarget + '</div><div class="progress"><div class="progress-bar" style="width:' + progressPct + '%"></div></div><div class="progress-text">' + progressText + '</div></div>';
+      } else {
+        const holders = (a.holders || []).map(h => '<span class="holder" style="color:' + h.level.color + '">' + h.name + ' ' + h.level.emoji + '</span>').join('');
+        return '<div class="ach-card ' + (a.count > 0 ? 'unlocked' : 'locked') + '"><div class="top"><span class="emoji">' + a.emoji + '</span><span class="name">' + a.name + '</span></div><div class="desc">' + a.desc + '</div><div class="holders">' + (holders || '还没人解锁') + '</div></div>';
+      }
+    }).join('');
+  } catch (e) { list.innerHTML = '<div class="empty">网络错误</div>'; }
+}
+const socket = io({ auth: { token } });
+socket.on('achievement_level_up', (d) => {
+  toast('🏆 ' + d.username + ' 的「' + d.achievement.name + '」升到 ' + d.level.emoji + ' ' + d.level.name);
+  if (currentTab === 'mine') load();
+});
+load();
+</script>
+</body>
+</html>

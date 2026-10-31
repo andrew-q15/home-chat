@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📒 我的账单本</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #f4f6f9; font-family: -apple-system, "PingFang SC", sans-serif; padding: 16px; padding-bottom: 60px; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .header h1 { font-size: 20px; color: #333; }
+  .header a { color: #666; text-decoration: none; font-size: 14px; }
+  
+  .tabs { display: flex; background: #fff; border-radius: 10px; padding: 4px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+  .tab { flex: 1; text-align: center; padding: 10px; border-radius: 8px; cursor: pointer; font-weight: bold; color: #666; transition: 0.2s; }
+  .tab.active { background: #2ecc71; color: #fff; }
+
+  .card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+  
+  /* 橘子账单 */
+  .orange-balance { font-size: 28px; font-weight: bold; color: #e67e22; margin-bottom: 8px; }
+  .ledger-list { list-style: none; }
+  .ledger-list li { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; font-size: 14px; }
+  .ledger-list li:last-child { border-bottom: none; }
+  .ledger-list .l-reason { color: #333; font-weight: 500; }
+  .ledger-list .l-time { font-size: 12px; color: #999; margin-top: 4px; }
+  .ledger-list .l-amt.pos { color: #2ecc71; font-weight: bold; }
+  .ledger-list .l-amt.neg { color: #e74c3c; font-weight: bold; }
+
+  /* 真实钱账本 */
+  .money-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+  .money-form-row { display: flex; gap: 10px; }
+  .money-form input, .money-form select { padding: 10px; border: 1px solid #ddd; border-radius: 8px; outline: none; flex: 1; font-size: 14px; }
+  .money-form button { padding: 12px; background: #333; color: #fff; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+  .m-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #eee; }
+  .m-item .info { flex: 1; }
+  .m-item .t { font-weight: bold; color: #333; font-size: 14px; }
+  .m-item .n { font-size: 12px; color: #999; margin-top: 4px; }
+  .m-item .amt { font-weight: bold; font-size: 16px; margin-left: 10px; }
+  .m-item .del { color: #e74c3c; font-size: 12px; margin-left: 10px; cursor: pointer; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📒 账单本</h1>
+  <a href="/">← 返回聊天室</a>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="__switchTab('orange')">🍊 橘子流水</div>
+  <div class="tab" onclick="__switchTab('money')">💰 现实记账</div>
+</div>
+
+<!-- 橘子流水 -->
+<div id="tab-orange">
+  <div class="card">
+    <div style="font-size:14px;color:#666;margin-bottom:8px;">当前橘子余额</div>
+    <div class="orange-balance" id="orange-bal">--</div>
+  </div>
+  <div class="card">
+    <ul class="ledger-list" id="orange-list"></ul>
+  </div>
+</div>
+
+<!-- 真实记账 -->
+<div id="tab-money" class="hidden">
+  <div class="card">
+    <div class="money-form">
+      <div class="money-form-row">
+        <select id="m-type">
+          <option value="expense">支出</option>
+          <option value="income">收入</option>
+          <option value="lend">借出</option>
+          <option value="borrow">借入</option>
+        </select>
+        <input type="number" id="m-amount" placeholder="金额 (¥)" step="0.01">
+      </div>
+      <input type="text" id="m-note" placeholder="备注 (比如：买零食、零花钱)">
+      <button onclick="__addMoney()">记一笔</button>
+    </div>
+  </div>
+  <div class="card">
+    <div id="money-list"></div>
+  </div>
+</div>
+
+<script>
+let myToken = localStorage.getItem('token');
+
+function __switchTab(t) {
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.querySelector(`.tab[onclick="__switchTab('${t}')"]`).classList.add('active');
+  document.getElementById('tab-orange').classList.toggle('hidden', t !== 'orange');
+  document.getElementById('tab-money').classList.toggle('hidden', t !== 'money');
+}
+
+function formatTime(ts) {
+  const d = new Date(ts);
+  return `${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+// 加载橘子流水
+fetch('/api/ledger/orange', { headers: { 'Authorization': myToken } })
+  .then(r=>r.json()).then(d => {
+    if (!d.ok) return;
+    document.getElementById('orange-bal').textContent = d.balance + ' 🍊';
+    const list = document.getElementById('orange-list');
+    if (d.ledger.length === 0) {
+      list.innerHTML = '<li style="justify-content:center;color:#999;">暂无流水记录</li>';
+      return;
+    }
+    list.innerHTML = d.ledger.map(l => `
+      <li>
+        <div>
+          <div class="l-reason">${l.reason}</div>
+          <div class="l-time">${formatTime(l.time)}</div>
+        </div>
+        <div class="l-amt ${l.amount > 0 ? 'pos' : 'neg'}">${l.amount > 0 ? '+' : ''}${l.amount} 🍊</div>
+      </li>
+    `).join('');
+  });
+
+// 加载真实账本
+function loadMoney() {
+  fetch('/api/ledger/money', { headers: { 'Authorization': myToken } })
+    .then(r=>r.json()).then(d => {
+      if (!d.ok) return;
+      const list = document.getElementById('money-list');
+      if (d.money.length === 0) {
+        list.innerHTML = '<div style="text-align:center;color:#999;font-size:14px;padding:20px 0;">还没有记过账哦</div>';
+        return;
+      }
+      list.innerHTML = d.money.map(m => {
+        let typeName = m.type === 'expense' ? '支出' : (m.type === 'income' ? '收入' : (m.type === 'lend' ? '借出' : '借入'));
+        let sign = (m.type === 'expense' || m.type === 'lend') ? '-' : '+';
+        let color = sign === '-' ? '#e74c3c' : '#2ecc71';
+        return `
+          <div class="m-item">
+            <div class="info">
+              <div class="t">${m.note || typeName}</div>
+              <div class="n">${formatTime(m.time)} · ${typeName}</div>
+            </div>
+            <div class="amt" style="color:${color};">${sign}¥${m.amount.toFixed(2)}</div>
+            <div class="del" onclick="__delMoney('${m.id}')">删除</div>
+          </div>
+        `;
+      }).join('');
+    });
+}
+
+function __addMoney() {
+  const type = document.getElementById('m-type').value;
+  const amount = document.getElementById('m-amount').value;
+  const note = document.getElementById('m-note').value;
+  if (!amount || amount <= 0) return alert('请输入正确金额');
+  
+  fetch('/api/ledger/money', {
+    method: 'POST', headers: { 'Authorization': myToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type, amount, note })
+  }).then(r=>r.json()).then(d => {
+    if (d.ok) {
+      document.getElementById('m-amount').value = '';
+      document.getElementById('m-note').value = '';
+      loadMoney();
+    } else {
+      alert(d.msg);
+    }
+  });
+}
+
+function __delMoney(id) {
+  if (!confirm('确定删除这条记录？')) return;
+  fetch('/api/ledger/money/' + id, { method: 'DELETE', headers: { 'Authorization': myToken } })
+    .then(r=>r.json()).then(d => { if (d.ok) loadMoney(); });
+}
+
+loadMoney();
+</script>
+</body>
+</html>

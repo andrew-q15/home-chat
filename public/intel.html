@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>📌 家庭情报局</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px; background: #000;
+    font-family: system-ui, -apple-system, "PingFang SC", sans-serif; min-height: 100vh;
+  }
+  .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: #000; border: 1px solid rgba(255,235,59,.18); padding: 12px 20px; border-radius: 8px; color: #fff; }
+  .top-bar h1 { margin: 0; font-size: 20px; color: #ffeb3b; }
+  .top-bar a { color: #ffeb3b; text-decoration: none; font-size: 14px; }
+  .input-area {
+    background-color: #6d4c41;
+    background-image: repeating-linear-gradient(45deg, rgba(0,0,0,0.1) 25%, transparent 25%, transparent 75%, rgba(0,0,0,0.1) 75%, rgba(0,0,0,0.1)), repeating-linear-gradient(45deg, rgba(0,0,0,0.1) 25%, #6d4c41 25%, #6d4c41 75%, rgba(0,0,0,0.1) 75%, rgba(0,0,0,0.1));
+    background-position: 0 0, 10px 10px; background-size: 20px 20px;
+    padding: 16px; border-radius: 12px; margin-bottom: 30px; display: flex; flex-wrap: wrap; gap: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  }
+  .input-area textarea { flex: 1; min-width: 200px; height: 60px; padding: 10px; border: 1px solid #ccc; border-radius: 6px; resize: none; outline: none; font-size: 14px; font-family: inherit; }
+  .input-area select { padding: 0 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; outline: none; background: #fff; }
+  .input-area button { padding: 10px 24px; background: #e53935; color: #fff; border: none; border-radius: 6px; font-size: 15px; font-weight: bold; cursor: pointer; transition: transform 0.1s; }
+  .input-area button:active { transform: scale(0.95); }
+  .board { display: flex; flex-wrap: wrap; gap: 24px; align-content: flex-start; }
+  .note { width: 220px; min-height: 180px; background: #fdfb8a; box-shadow: 3px 5px 15px rgba(0,0,0,0.4); padding: 20px 16px 30px; position: relative; transition: transform 0.2s, box-shadow 0.2s; color: #333; transform: rotate(-2deg); }
+  .note:hover { transform: rotate(0deg) scale(1.05); box-shadow: 5px 8px 25px rgba(0,0,0,0.5); z-index: 10; }
+  .pin { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle at 30% 30%, #ff5252, #b71c1c); box-shadow: 2px 4px 6px rgba(0,0,0,0.5), inset -2px -2px 4px rgba(0,0,0,0.3); z-index: 2; }
+  .pin::after { content: ''; position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%); width: 2px; height: 8px; background: #555; }
+  .note .content { font-size: 15px; font-weight: 600; line-height: 1.5; margin-bottom: 20px; word-wrap: break-word; white-space: pre-wrap; }
+  .note .meta { position: absolute; bottom: 10px; left: 16px; right: 16px; display: flex; justify-content: space-between; font-size: 12px; color: #666; }
+  .note .reward { color: #d32f2f; font-weight: bold; }
+  .note.price { background: #a5d6a7; transform: rotate(1deg); }
+  .note.gossip { background: #90caf9; transform: rotate(-1.5deg); }
+  .note.warning { background: #ffab91; transform: rotate(2deg); }
+  #toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #323232; color: #fff; padding: 12px 24px; border-radius: 30px; font-size: 15px; z-index: 999; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+  #toast.show { opacity: 1; }
+
+  .note:hover .del-btn { display: block; }
+  .note .del-btn:hover { color: #b71c1c; }
+
+  /* ===== 情报局 KPI 卡片 ===== */
+  #kpi-area { margin-bottom: 20px; }
+  .kpi-card {
+    background: #000; color: #fff; border-radius: 12px;
+    border: 1px solid rgba(255,235,59,.18);
+    padding: 16px 20px; box-shadow: 0 4px 16px rgba(0,0,0,.6);
+  }
+  .kpi-card h2 { margin: 0 0 12px; font-size: 16px; color: #ffeb3b; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .kpi-item { background: rgba(255,255,255,.1); border-radius: 8px; padding: 10px 12px; }
+  .kpi-item .label { font-size: 11px; color: #bbb; margin-bottom: 4px; }
+  .kpi-item .value { font-size: 20px; font-weight: 700; color: #ffeb3b; }
+  .kpi-item .value.warn { color: #ff5252; }
+  .kpi-item .value.ok { color: #69f0ae; }
+  .kpi-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  .kpi-actions button {
+    padding: 8px 18px; border: none; border-radius: 6px; font-size: 14px;
+    font-weight: 600; cursor: pointer;
+  }
+  .kpi-actions .join { background: #43a047; color: #fff; }
+  .kpi-actions .leave { background: transparent; color: #ff8a80; border: 1px solid #ff8a80; }
+  .kpi-rules { font-size: 12px; color: #bbb; line-height: 1.7; margin-top: 10px; }
+  .debt-warn { background: rgba(255,82,82,.15); border: 1px solid #ff5252; color: #ff8a80; padding: 8px 12px; border-radius: 6px; font-size: 13px; margin-bottom: 12px; }
+
+  /* ===== 万能数据站 ===== */
+  #hub-area { margin-bottom: 20px; }
+  .hub-title { font-size: 15px; color: #fff; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+  .hub-title button { padding: 4px 12px; background: #e53935; color: #fff; border: none; border-radius: 6px; font-size: 12px; cursor: pointer; }
+  .hub-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .hub-card {
+    background: #000; border: 1px solid rgba(255,235,59,.22);
+    border-radius: 10px; padding: 12px 14px; color: #eee; font-size: 13px;
+    min-height: 100px; position: relative;
+  }
+  .hub-card .h-title { font-size: 13px; color: #ffeb3b; font-weight: 700; margin-bottom: 8px; display: flex; justify-content: space-between; }
+  .hub-card .h-refresh { cursor: pointer; opacity: .6; font-size: 12px; }
+  .hub-card .h-refresh:hover { opacity: 1; }
+  .hub-card .h-body { line-height: 1.6; color: #ddd; word-break: break-word; }
+  .hub-card .h-body .big { font-size: 22px; color: #fff; font-weight: 700; }
+  .hub-card .h-body .muted { color: #999; font-size: 12px; }
+  .hub-card .h-body ol { margin: 0; padding-left: 18px; }
+  .hub-card .h-body ol li { margin: 3px 0; font-size: 12px; }
+  .hub-card .h-body .rate-row { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
+
+  /* ===== 3D 旋转地球（纯 CSS 装饰）===== */
+  .globe-wrap { display: flex; justify-content: center; margin: 6px 0 20px; }
+  .globe {
+    width: min(510px, 88vw); height: min(510px, 88vw); position: relative;
+    perspective: 1400px;
+    animation: globeFloat 5s ease-in-out infinite;
+  }
+  @keyframes globeFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-9px)} }
+
+  .globe-glow {
+    position: absolute; inset: -70px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(80,240,130,.42), transparent 68%);
+    filter: blur(8px);
+    animation: glowPulse 4s ease-in-out infinite;
+  }
+  @keyframes glowPulse { 0%,100%{opacity:.6; transform:scale(.97)} 50%{opacity:1; transform:scale(1.04)} }
+
+  .globe-sphere {
+    position: absolute; inset: 0; border-radius: 50%;
+    background: radial-gradient(circle at 32% 28%,
+      #e6ffd9 0%, #8cf07a 14%, #2ecc40 40%, #0f7a1f 66%, #04220a 100%);
+    box-shadow:
+      inset -18px -20px 36px rgba(0,0,0,.62),
+      inset 10px 10px 22px rgba(255,255,255,.16),
+      0 0 36px rgba(70,230,120,.6),
+      0 0 96px rgba(70,230,120,.3);
+  }
+
+  .globe-shine {
+    position: absolute; top: 7%; left: 16%;
+    width: 40%; height: 26%; border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,255,255,.75), transparent 70%);
+    filter: blur(5px); pointer-events: none;
+  }
+
+  .globe-grid {
+    position: absolute; inset: 0; border-radius: 50%;
+    transform-style: preserve-3d;
+    animation: globeSpin 14s linear infinite;
+  }
+  @keyframes globeSpin { to { transform: rotateY(360deg); } }
+
+  .globe-ring {
+    position: absolute; inset: 0; border-radius: 50%;
+    border: 1px solid rgba(80,160,255,.7);
+  }
+  .globe-ring:nth-child(1) { transform: rotateY(0deg); }
+  .globe-ring:nth-child(2) { transform: rotateY(60deg); }
+  .globe-ring:nth-child(3) { transform: rotateY(120deg); }
+
+  .globe-lat {
+    position: absolute; left: 0; right: 0;
+    height: 1px; background: rgba(80,160,255,.5);
+  }
+  .globe-lat.l1 { top: 30%; }
+  .globe-lat.l2 { top: 50%; }
+  .globe-lat.l3 { top: 70%; }
+
+  .globe-net {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    pointer-events: none; overflow: visible;
+  }
+  #code-rain-bg {
+    position: fixed; top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: -1; pointer-events: none;
+  }
+  .star {
+    position: absolute; width: 7px; height: 7px; border-radius: 50%;
+    background: #d8f0ff;
+    box-shadow: 0 0 8px 2px rgba(160,220,255,.9);
+    animation: twinkle 2.4s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes twinkle {
+    0%,100% { opacity: .12; transform: scale(.5); }
+    50%     { opacity: 1;   transform: scale(1.4); }
+  }
+
+  /* ===== 地球 + 代码雨 横排 ===== */
+  .globe-row {
+    display: flex; justify-content: center; align-items: center;
+    gap: 18px; flex-wrap: wrap; margin: 6px 0 20px;
+  }
+  .globe-row .globe-wrap { margin: 0; }
+
+  .code-panel-col {
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .code-panel {
+    width: 210px; height: 96px;
+    background: rgba(0, 10, 20, .88);
+    border: 1px solid rgba(80, 200, 255, .35);
+    border-radius: 10px; padding: 8px 10px; overflow: hidden;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 10.5px; line-height: 1.55; color: #7ee787;
+    box-shadow: 0 0 24px rgba(80, 200, 255, .22), inset 0 0 24px rgba(0, 40, 80, .65);
+    position: relative;
+  }
+  .code-panel::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,.16) 0 1px, transparent 1px 3px);
+  }
+  .code-panel::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(180deg, rgba(0,0,0,.55), transparent 18%, transparent 82%, rgba(0,0,0,.55));
+  }
+  .code-line {
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    opacity: 0; animation: codeIn .28s forwards;
+  }
+  @keyframes codeIn { to { opacity: .9; } }
+  .code-line .kw { color: #ff7b72; }
+  .code-line .fn { color: #d2a8ff; }
+  .code-line .st { color: #a5d6ff; }
+  .code-line .cm { color: #8b949e; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1>📌 家庭情报局</h1>
+  <a href="/">← 返回聊天室</a>
+</div>
+
+<div class="globe-row">
+<div class="globe-wrap">
+  <div class="globe">
+    <div class="globe-glow"></div>
+    <div class="globe-sphere"></div>
+    <div class="globe-shine"></div>
+    <div class="globe-grid">
+      <div class="globe-ring"></div>
+      <div class="globe-ring"></div>
+      <div class="globe-ring"></div>
+    </div>
+    <div class="globe-lat l1"></div>
+    <div class="globe-lat l2"></div>
+    <div class="globe-lat l3"></div>
+    <svg class="globe-net" viewBox="0 0 170 170"></svg>
+    <span class="star" style="top:20%;left:26%;animation-delay:0s"></span>
+    <span class="star" style="top:38%;left:68%;animation-delay:.7s"></span>
+    <span class="star" style="top:58%;left:22%;animation-delay:1.3s"></span>
+    <span class="star" style="top:72%;left:60%;animation-delay:.4s"></span>
+    <span class="star" style="top:46%;left:44%;animation-delay:1.8s"></span>
+  </div>
+</div>
+
+<div class="code-panel-col">
+  <div class="code-panel" id="code-panel-1"></div>
+  <div class="code-panel" id="code-panel-2"></div>
+  <div class="code-panel" id="code-panel-3"></div>
+</div>
+</div>
+
+<div id="kpi-area"></div>
+
+<div id="hub-area">
+  <div class="hub-title">
+    <span>🌐 万能数据站</span>
+    <button onclick="__hubRefreshAll()">🔄 全部刷新</button>
+  </div>
+  <div class="hub-grid" id="hub-grid"></div>
+</div>
+
+
+    <!-- 自定义 API 沙箱 -->
+    <div class="kpi-card" id="api-sandbox" style="margin-bottom: 20px; border-color: #3498db;">
+      <h2 style="color:#3498db;">🔌 自定义 API 接入</h2>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px;">
+        <input type="text" id="api-name" placeholder="API 名字 (如: 每日毒鸡汤)" style="flex:1; min-width:150px; padding:10px; border-radius:6px; border:1px solid #444; background:#222; color:#fff; outline:none;">
+        <input type="text" id="api-url" placeholder="API URL (必须返回JSON)" style="flex:2; min-width:200px; padding:10px; border-radius:6px; border:1px solid #444; background:#222; color:#fff; outline:none;">
+        <button onclick="__testApi()" style="padding:10px 20px; background:#3498db; color:#fff; border:none; border-radius:6px; font-weight:bold; cursor:pointer;">沙箱测试并接入</button>
+      </div>
+      <div id="api-list" style="display:flex; flex-wrap:wrap; gap:10px;">
+        <!-- 已接入的 API 渲染在这里 -->
+      </div>
+    </div>
+
+    <div class="input-area">
+  <textarea id="intel-text" placeholder="在这里贴上新情报（如：楼下超市鸡蛋打折、小区停水通知、避坑指南...）"></textarea>
+  <select id="intel-type">
+    <option value="general">📝 普通情报 (黄)</option>
+    <option value="price">💸 优惠物价 (绿)</option>
+    <option value="gossip">👀 八卦新闻 (蓝)</option>
+    <option value="warning">⚠️ 避坑预警 (红)</option>
+  </select>
+  <button id="submit-btn">贴情报，得 2 🍊</button>
+</div>
+
+<div class="board" id="board"></div>
+<div id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(function() {
+  var token = localStorage.getItem('token');
+  if (!token) { alert('未登录'); location.href = '/'; return; }
+  
+  var socket = io({ auth: { token } });
+  var boardEl = document.getElementById('board');
+  var toastEl = document.getElementById('toast');
+  var textEl = document.getElementById('intel-text');
+  var typeEl = document.getElementById('intel-type');
+  var submitBtn = document.getElementById('submit-btn');
+
+  function showToast(msg, isError) {
+    toastEl.textContent = msg;
+    toastEl.style.background = isError ? '#d32f2f' : '#323232';
+    toastEl.classList.add('show');
+    setTimeout(function() { toastEl.classList.remove('show'); }, 3000);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function(c) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function renderNote(item, isNew) {
+    var div = document.createElement('div');
+    div.className = 'note ' + (item.type || 'general');
+    var t = new Date(item.time).toLocaleString('zh-CN', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'});
+    
+    div.innerHTML = '<div class="pin"></div>' +
+      '<div class="content">' + escapeHtml(item.text) + '</div>' +
+      '<div class="meta">' +
+      '<span>' + escapeHtml(item.authorName || item.author) + '</span>' +
+      '<span>' + t + '</span>' +
+      '</div>' +
+      '<div class="meta" style="bottom:-16px; color:#fff; text-shadow:1px 1px 2px #000;">' +
+      (item.reward > 0 ? '<span style="color:#ffeb3b">💰 +' + item.reward + ' 🍊</span>' : '<span></span>') +
+      '</div>';
+    
+    // 如果是实时收到的，加个高亮动画
+    if (isNew) {
+      div.style.transform = 'scale(0.5)';
+      div.style.opacity = '0';
+      setTimeout(function() {
+        div.style.transition = 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+        div.style.transform = 'rotate(-2deg) scale(1)';
+        div.style.opacity = '1';
+      }, 10);
+    }
+
+    if (isNew) {
+      boardEl.insertBefore(div, boardEl.firstChild);
+    } else {
+      boardEl.appendChild(div);
+    }
+  }
+
+  fetch('/api/intel/list', { headers: { 'Authorization': token } })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok && d.intel) {
+        var arr = d.intel.slice().reverse(); // 反转让最早的先插进去
+        arr.forEach(function(item) { renderNote(item, false); });
+      }
+    });
+
+
+
+
+  socket.on('intel_deleted', function(data) {
+    // 从 DOM 里移除
+    var notes = document.querySelectorAll('.note');
+    // 因为没有 data-id 属性，我们通过 onclick 里的 id 寻找
+    notes.forEach(function(n) {
+      var btn = n.querySelector('.del-btn');
+      if (btn && btn.getAttribute('onclick').includes(data.id)) {
+        n.remove();
+      }
+    });
+  });
+
+  socket.on('intel_updated', function(item) {
+    if (item.reset) {
+      boardEl.innerHTML = '';
+      fetch('/api/intel/list', { headers: { 'Authorization': token } })
+        .then(r => r.json()).then(d => {
+          if (d.ok && d.intel) {
+            var arr = d.intel.slice().reverse();
+            arr.forEach(function(it) { renderNote(it, false); });
+          }
+        });
+    } else {
+      renderNote(item, true);
+    }
+  });
+
+  submitBtn.addEventListener('click', function() {
+    var text = textEl.value.trim();
+    if (!text) return;
+    
+    submitBtn.disabled = true;
+    submitBtn.textContent = '正在上传...';
+    
+    fetch('/api/intel', {
+      method: 'POST',
+      headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text, type: typeEl.value })
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      if (d.ok) {
+        showToast('情报已贴出，奖励 ' + d.reward + ' 🍊 已到账！');
+        textEl.value = '';
+      } else {
+        showToast(d.msg || '失败', true);
+      }
+    }).catch(function() {
+      showToast('网络错误', true);
+    }).finally(function() {
+      submitBtn.disabled = false;
+      submitBtn.textContent = '贴情报，得 2 🍊';
+    });
+  });
+})();
+</script>
+<script>
+(function(){
+  var token = localStorage.getItem('token');
+  if (!token) return;
+  var area = document.getElementById('kpi-area');
+  if (!area) return;
+
+  function esc(t){ return String(t == null ? '' : t).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  function render(status) {
+    if (!status.joined) {
+      area.innerHTML =
+        '<div class="kpi-card">' +
+          '<h2>📌 加入情报局</h2>' +
+          '<div class="kpi-rules">' +
+            '• 加入后每天要交 <b>有效情报</b>（AI 评分 &gt; 3）<br>' +
+            '• 前 7 天每天 <b>5 条</b>，第 8 天起每天 <b>10 条</b><br>' +
+            '• 没达标：扣 <b>10 🍊</b>，可欠账<br>' +
+            '• 连续 30 天达标：奖励 <b>5000 🍊</b><br>' +
+            '• 欠账中：不能花橘子（发情报、抢红包不受限）<br>' +
+            '• 欠账期发灌水情报（AI ≤3）：每条扣 <b>1 🍊</b>' +
+          '</div>' +
+          '<div class="kpi-actions" style="margin-top:14px">' +
+            '<button class="join" onclick="__intelJoin()">加入情报局</button>' +
+          '</div>' +
+        '</div>';
+      return;
+    }
+
+    var quota = status.todayQuota || 10;
+    var count = status.todayCount || 0;
+    var pct = Math.min(100, Math.round(count / quota * 100));
+    var countCls = count >= quota ? 'ok' : 'warn';
+    var debtCls = status.oranges < 0 ? 'warn' : 'ok';
+    var html =
+      '<div class="kpi-card">' +
+        '<h2>📌 我的情报局 KPI</h2>';
+    if (status.oranges < 0) {
+      html += '<div class="debt-warn">⚠️ 你正在欠账（余额 ' + status.oranges + ' 🍊），花钱功能已锁定。发情报、抢红包还能用，努力还债吧！</div>';
+    }
+    html +=
+        '<div class="kpi-grid">' +
+          '<div class="kpi-item"><div class="label">今日情报</div><div class="value ' + countCls + '">' + count + ' / ' + quota + '</div></div>' +
+          '<div class="kpi-item"><div class="label">连续达标</div><div class="value">' + (status.streak || 0) + ' 天</div></div>' +
+          '<div class="kpi-item"><div class="label">当前余额</div><div class="value ' + debtCls + '">' + status.oranges + ' 🍊</div></div>' +
+          '<div class="kpi-item"><div class="label">累计欠账</div><div class="value ' + (status.debt ? 'warn' : '') + '">' + (status.debt || 0) + ' 🍊</div></div>' +
+        '</div>' +
+        '<div class="kpi-actions">' +
+          '<button class="leave" onclick="__intelLeave()">退出情报局</button>' +
+        '</div>' +
+        '<div class="kpi-rules" style="margin-top:10px">' +
+          '• 每天达标：前 7 天 5 条，之后 10 条（AI &gt; 3 分算有效）<br>' +
+          '• 没达标：扣 10 🍊，连续天数归零<br>' +
+          '• 连续 30 天：奖励 5000 🍊' +
+        '</div>' +
+      '</div>';
+    area.innerHTML = html;
+  }
+
+  function load() {
+    fetch('/api/intel/status', { headers: { 'Authorization': token } })
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if (d.ok) render(d); })
+      .catch(function(){});
+  }
+
+  window.__intelJoin = function() {
+    fetch('/api/intel/join', { method: 'POST', headers: { 'Authorization': token } })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (!d.ok) { alert(d.msg || '加入失败'); return; }
+        load();
+      });
+  };
+
+  window.__intelLeave = function() {
+    if (!confirm('确定退出情报局？退出后连续天数清零，欠账保留。')) return;
+    fetch('/api/intel/leave', { method: 'POST', headers: { 'Authorization': token } })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (!d.ok) { alert(d.msg || '退出失败'); return; }
+        load();
+      });
+  };
+
+  load();
+  // 每 30 秒刷新一次状态
+  setInterval(load, 30000);
+})();
+</script>
+<script>
+(function(){
+  var token = localStorage.getItem('token');
+  if (!token) return;
+  var H = { 'Authorization': token };
+  var grid = document.getElementById('hub-grid');
+  if (!grid) return;
+
+  function esc(t){ return String(t == null ? '' : t).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  // 5 个卡片定义
+  var CARDS = [
+    { id: 'weather', title: '🌤️ 天气', render: renderWeather },
+    { id: 'poem',    title: '📜 诗词', render: renderPoem },
+    { id: 'news',    title: '📰 新闻', render: renderNews },
+    { id: 'rate',    title: '💱 汇率', render: renderRate },
+    { id: 'joke',    title: '😂 笑话', render: renderJoke },
+  ];
+
+  function renderWeather(d) {
+    if (!d.ok) return '<span class="muted">暂时不可用</span>';
+    var w = d.weather;
+    return '<div class="big">' + w.temp + '°C ' + esc(w.text) + '</div>' +
+           '<div class="muted">西安 · ' + w.min + '~' + w.max + '°C</div>';
+  }
+  function renderPoem(d) {
+    if (!d.ok) return '<span class="muted">暂时不可用</span>';
+    return '<div>' + esc(d.poem.content) + '</div>' +
+           '<div class="muted">——《' + esc(d.poem.origin || '') + '》</div>';
+  }
+  function renderNews(d) {
+    if (!d.ok) return '<span class="muted">暂时不可用</span>';
+    return '<ol>' + d.news.slice(0, 5).map(function(t){ return '<li>' + esc(t) + '</li>'; }).join('') + '</ol>';
+  }
+  function renderRate(d) {
+    if (!d.ok) return '<span class="muted">暂时不可用</span>';
+    var r = d.rate;
+    return '<div class="rate-row"><span>1 CNY</span><span>' + (1 / r.USD).toFixed(2) + ' USD</span></div>' +
+           '<div class="rate-row"><span></span><span>' + r.EUR.toFixed(3) + ' EUR</span></div>' +
+           '<div class="rate-row"><span></span><span>' + r.JPY.toFixed(2) + ' JPY</span></div>' +
+           '<div class="rate-row"><span></span><span>' + r.HKD.toFixed(3) + ' HKD</span></div>';
+  }
+  function renderJoke(d) {
+    if (!d.ok) return '<span class="muted">暂时不可用</span>';
+    return '<div>' + esc(d.joke) + '</div>';
+  }
+
+  function loadCard(card) {
+    var el = document.getElementById('hub-' + card.id);
+    if (!el) return;
+    var body = el.querySelector('.h-body');
+    body.innerHTML = '<span class="muted">加载中…</span>';
+    fetch('/api/hub/' + card.id, { headers: H })
+      .then(function(r){ return r.json(); })
+      .then(function(d){ body.innerHTML = card.render(d); })
+      .catch(function(){ body.innerHTML = '<span class="muted">加载失败</span>'; });
+  }
+
+  function buildCards() {
+    grid.innerHTML = CARDS.map(function(c){
+      return '<div class="hub-card" id="hub-' + c.id + '">' +
+        '<div class="h-title"><span>' + c.title + '</span>' +
+        '<span class="h-refresh" data-id="' + c.id + '">🔄</span></div>' +
+        '<div class="h-body"><span class="muted">加载中…</span></div>' +
+      '</div>';
+    }).join('');
+    grid.querySelectorAll('.h-refresh').forEach(function(b){
+      b.onclick = function(){
+        var c = CARDS.find(function(x){ return x.id === b.getAttribute('data-id'); });
+        if (c) loadCard(c);
+      };
+    });
+    CARDS.forEach(loadCard);
+  }
+
+  window.__hubRefreshAll = function(){
+    fetch('/api/hub/all', { headers: H }).then(function(){
+      CARDS.forEach(loadCard);
+    });
+  };
+
+  buildCards();
+})();
+</script>
+<script>
+(function(){
+  var panels = [
+    document.getElementById('code-panel-1'),
+    document.getElementById('code-panel-2'),
+    document.getElementById('code-panel-3'),
+  ].filter(Boolean);
+  if (!panels.length) return;
+
+  var pool = [
+    `<span class="kw">const</span> _0x4f2a = <span class="kw">await</span> <span class="fn">fetch</span>(<span class="st">'/api/hub/'</span> + <span class="fn">Math.random</span>().<span class="fn">toString</span>(36) + <span class="st">'?ts='</span> + Date.now(), { cache: <span class="st">'no-store'</span> });`,
+    `<span class="kw">if</span> (buffer.length &gt; 1024) { <span class="fn">flush</span>(); <span class="fn">rotate</span>(shard); <span class="fn">emit</span>(<span class="st">'drain'</span>, { bytes: buffer.length }); }`,
+    `<span class="cm">// 加密通道已建立 · AES-256-GCM · peer=10.0.0.{n} · rtt={n}ms · cipher=chacha20-poly1305</span>`,
+    `<span class="kw">SELECT</span> id, payload, <span class="fn">sha256</span>(payload) <span class="kw">FROM</span> intel <span class="kw">WHERE</span> value &gt; 3 <span class="kw">AND</span> ts &gt; {n} <span class="kw">ORDER BY</span> ts <span class="kw">DESC</span> <span class="kw">LIMIT</span> {n};`,
+    `git commit -m <span class="st">"fix: stabilize reactor core · patch shard-{n} · bump rtt budget"</span> &amp;&amp; git push origin main --force-with-lease`,
+    `<span class="kw">async function</span> <span class="fn">syncOrbit</span>(shard, { retries = {n}, timeout = 1500 } = {}) { <span class="kw">return</span> <span class="kw">await</span> <span class="fn">seek</span>({ shard, retries, timeout }); }`,
+    `[INFO] peer connected: 10.0.0.{n} · handshake=ok · cipher=AES-256-GCM · rtt={n}ms · shard={n}/16 · mode=full-duplex`,
+    `<span class="kw">let</span> entropy = crypto.<span class="fn">getRandomValues</span>(new Uint8Array(32)); <span class="kw">const</span> key = <span class="kw">await</span> crypto.subtle.<span class="fn">importKey</span>(<span class="st">'raw'</span>, entropy, { name: <span class="st">'AES-GCM'</span> }, <span class="kw">false</span>, [<span class="st">'encrypt'</span>]);`,
+    `npm run build -- --turbo --silent --target=es2022 --minify --sourcemap=hidden &amp;&amp; npm run deploy:edge -- --region=cn-north`,
+    `<span class="cm">// TODO: remove this before prod · @deprecated use pipelineV2 · see issue #4217 · owner=core</span>`,
+    `<span class="kw">return</span> ok ? { status: <span class="st">'ok'</span>, shard, rtt: {n} } : { status: <span class="st">'retry'</span>, backoff: {n} * 2 };`,
+    `[WARN] latency spike {n}ms · rebalancing shard-{n} → shard-{n} · queue_depth={n} · drop_rate=0.0{n}%`,
+    `<span class="fn">console</span>.<span class="fn">log</span>(<span class="st">'[hub] cache hit'</span>, { key: <span class="st">'shard-{n}'</span>, ttl: {n}, hit: <span class="kw">true</span>, size: {n} });`,
+    `<span class="kw">for</span> (<span class="kw">let</span> i = 0; i &lt; {n}; i++) { <span class="kw">await</span> <span class="fn">scan</span>(i); <span class="kw">if</span> (i % {n} === 0) <span class="fn">checkpoint</span>(i); }`,
+    `[DBG] shard-{n} · checksum verified · merkle_root=0x{n}a{n}f · peers={n} · uptime={n}s · load=0.{n}`,
+    `<span class="kw">import</span> { <span class="fn">orbit</span>, <span class="fn">pipeline</span>, <span class="fn">retry</span> } <span class="kw">from</span> <span class="st">'./core'</span>; <span class="kw">import</span> type { Shard } <span class="kw">from</span> <span class="st">'./types'</span>;`,
+    `<span class="kw">try</span> { <span class="kw">await</span> <span class="fn">pipeline</span>({ shard: <span class="st">'s-{n}'</span>, retries: {n} }); } <span class="kw">catch</span> (e) { <span class="fn">retry</span>(e, { n: {n}, backoff: <span class="st">'exp'</span> }); }`,
+    `[OK] handshake complete · rtt={n}ms · shard={n}/16 · session=0x{n}a{n}f · ttl={n}s · mode=full-duplex`,
+    `git push origin <span class="st">main</span> --force-with-lease &amp;&amp; git tag -a v1.{n}.{n} -m <span class="st">"release: orbit core"</span> &amp;&amp; git push --tags`,
+    `<span class="kw">const</span> hash = <span class="fn">sha256</span>(payload + <span class="st">':{n}'</span>); <span class="kw">if</span> (hash !== expected) <span class="kw">throw new</span> <span class="fn">Error</span>(<span class="st">'integrity fail'</span>);`,
+    `[NET] dns.resolve('orbit.local') → 10.0.0.{n} · ttl={n}s · proto=quic · cipher=chacha20 · mtu=1400`,
+    `<span class="kw">export default</span> <span class="kw">async function</span> <span class="fn">bootstrap</span>({ shard, peers, timeout = {n} }) { <span class="kw">return</span> <span class="fn">orbit</span>({ shard, peers, timeout }); }`
+  ];
+
+  function gen() {
+    var t = pool[Math.floor(Math.random() * pool.length)];
+    return t.replace(/\{n\}/g, function(){ return Math.floor(Math.random() * 256); });
+  }
+
+  function pushLine(panel, maxLines) {
+    var div = document.createElement('div');
+    div.className = 'code-line';
+    div.innerHTML = gen();
+    panel.appendChild(div);
+    while (panel.childElementCount > maxLines) panel.removeChild(panel.firstElementChild);
+    panel.scrollTop = panel.scrollHeight;
+  }
+  function tick() {
+    for (var i = 0; i < panels.length; i++) {
+      // 每个面板独立随机，有的快有的慢，看起来更乱
+      if (Math.random() < 0.85) {
+        pushLine(panels[i], 8);
+      }
+    }
+    setTimeout(tick, 11 + Math.random() * 15);
+  }
+  tick();
+})();
+</script>
+<script>
+(function(){
+  var svg = document.querySelector('.globe-net');
+  if (!svg) return;
+  var NS = 'http://www.w3.org/2000/svg';
+  var R = 75, CX = 85, CY = 85;
+  var points = [];
+  for (var i = 0; i < 14; i++) {
+    var a = Math.random() * Math.PI * 2;
+    var r = Math.sqrt(Math.random()) * R * 0.9;
+    var x = CX + Math.cos(a) * r;
+    var y = CY + Math.sin(a) * r;
+    points.push({ x: x, y: y });
+    var c = document.createElementNS(NS, 'circle');
+    c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 1.7);
+    c.setAttribute('fill', 'rgba(120,255,160,.92)');
+    c.setAttribute('style', 'filter: drop-shadow(0 0 3px rgba(120,255,160,.95))');
+    svg.appendChild(c);
+  }
+  function addLine() {
+    var a = points[Math.floor(Math.random() * points.length)];
+    var b = points[Math.floor(Math.random() * points.length)];
+    if (a === b) return;
+    var len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len < 18) return;
+    var line = document.createElementNS(NS, 'line');
+    line.setAttribute('x1', a.x); line.setAttribute('y1', a.y);
+    line.setAttribute('x2', b.x); line.setAttribute('y2', b.y);
+    line.setAttribute('stroke', 'rgba(100,190,255,.9)');
+    line.setAttribute('stroke-width', '1.1');
+    line.setAttribute('stroke-dasharray', len);
+    line.setAttribute('stroke-dashoffset', len);
+    line.setAttribute('style', 'filter: drop-shadow(0 0 3px rgba(100,190,255,.9))');
+    svg.appendChild(line);
+    var start = performance.now();
+    function draw(now) {
+      var t = Math.min(1, (now - start) / 260);
+      line.setAttribute('stroke-dashoffset', len * (1 - t));
+      if (t < 1) requestAnimationFrame(draw);
+      else {
+        line.style.transition = 'opacity .8s';
+        setTimeout(function(){ line.style.opacity = '0'; }, 500);
+        setTimeout(function(){ line.remove(); }, 1400);
+      }
+    }
+    requestAnimationFrame(draw);
+  }
+  setInterval(function(){
+    var n = 1 + Math.floor(Math.random() * 3); // 每秒最多 3 条
+    for (var i = 0; i < n; i++) {
+      setTimeout(addLine, i * 110);
+    }
+  }, 1000);
+})();
+</script>
+<canvas id="code-rain-bg"></canvas>
+<script>
+(function(){
+  var canvas = document.getElementById('code-rain-bg');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var LINE_H = 22;
+  var FONT = '12.5px ui-monospace,Menlo,Consolas,monospace';
+  var SPEED = 8;             // 每帧上移像素（4 × 2）
+
+  var COL = {
+    plain:   '#7ee787',
+    keyword: '#ff7b72',
+    string:  '#a5d6ff',
+    comment: '#8b949e',
+    number:  '#ffa657',
+    fn:      '#d2a8ff',
+    punct:   '#79c0ff'
+  };
+
+  var CODE_SNIPPETS = [
+    'const x = await fetch("/api/hub/" + Math.random().toString(36) + "?ts=" + Date.now(), { cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(3000) });',
+    'if (buffer.length > 1024) { flush(); rotate(shard); emit("drain", { bytes: buffer.length, shard, rtt: 8, mode: "full-duplex" }); } else { scheduleDrain(1024 - buffer.length); }',
+    '// 加密通道已建立 · AES-256-GCM · peer=10.0.0.7 · rtt=12ms · cipher=chacha20-poly1305 · mode=full-duplex · shard=7/16 · ttl=3600',
+    'SELECT id, payload, sha256(payload) AS digest FROM intel WHERE value > 3 AND ts > 1760000000 ORDER BY ts DESC LIMIT 256 OFFSET 0;',
+    'git commit -m "fix: stabilize reactor core · patch shard-3 · bump rtt budget · see #4217" && git push origin main --force-with-lease && git tag -a v1.4.2',
+    'async function syncOrbit(shard, { retries = 3, timeout = 1500, backoff = "exp" } = {}) { return await seek({ shard, retries, timeout, backoff }); }',
+    '[INFO] peer connected: 10.0.0.42 · handshake=ok · cipher=AES-256-GCM · rtt=8ms · shard=7/16 · mode=full-duplex · uptime=1024s · load=0.42',
+    'let entropy = crypto.getRandomValues(new Uint8Array(32)); const key = await crypto.subtle.importKey("raw", entropy, { name: "AES-GCM" }, false, ["encrypt","decrypt"]);',
+    'npm run build -- --turbo --silent --target=es2022 --minify --sourcemap=hidden && npm run deploy:edge -- --region=cn-north --replicas=16 --rollout=canary',
+    '// TODO: remove this before prod · @deprecated use pipelineV2 · see issue #4217 · owner=core-team · sla=99.95% · budget=1500ms',
+    'return ok ? { status: "ok", shard, rtt, mode: "full-duplex" } : { status: "retry", backoff: retries * 2, reason: "latency" };',
+    '[WARN] latency spike 87ms · rebalancing shard-3 → shard-7 · queue_depth=14 · drop_rate=0.03% · peers=16 · mode=degraded',
+    'console.log("[hub] cache hit", { key: "shard-7", ttl: 60, hit: true, size: 4096, shard: 7, peers: 16, rtt: 8 });',
+    'for (let i = 0; i < 256; i++) { await scan(i); if (i % 32 === 0) checkpoint(i, { shard, peers: 16, mode: "full-duplex" }); }',
+    '[DBG] shard-3 · checksum verified · merkle_root=0x4f2af · peers=16 · uptime=1024s · load=0.42 · rtt=8ms · mode=full-duplex',
+    'import { orbit, pipeline, retry } from "./core"; import type { Shard, Peer, Session } from "./types"; import { sha256 } from "./crypto";',
+    'try { await pipeline({ shard: "s-3", retries: 5, timeout: 2000, backoff: "exp" }); } catch (e) { retry(e, { n: 5, backoff: "exp", jitter: true }); }',
+    '[OK] handshake complete · rtt=8ms · shard=3/16 · session=0x4f2af · ttl=3600s · mode=full-duplex · cipher=AES-256-GCM · proto=quic',
+    'git tag -a v1.4.2 -m "release: orbit core · patch shard-7 · bump rtt budget · see #4217" && git push --tags && git push origin main --force-with-lease',
+    'const hash = sha256(payload + ":42"); if (hash !== expected) throw new Error("integrity fail · shard=3 · merkle=0x4f2af · peers=16");',
+    'export default async function bootstrap({ shard, peers = 16, timeout = 3000, mode = "full-duplex" }) { return orbit({ shard, peers, timeout, mode }); }',
+    '[NET] dns.resolve("orbit.local") → 10.0.0.7 · ttl=60s · proto=quic · cipher=chacha20 · mtu=1400 · rtt=8ms · shard=7/16 · mode=full-duplex'
+  ];
+
+  var CHARS = 'ABCDEF0123456789<>{}[]/\\*&%$#@!?;:'.split('');
+  function randomText() {
+    if (Math.random() < 0.6) {
+      return CODE_SNIPPETS[Math.floor(Math.random() * CODE_SNIPPETS.length)];
+    }
+    var n = 160 + Math.floor(Math.random() * 180);  // 160~340 字符
+    var out = '';
+    for (var i = 0; i < n; i++) out += CHARS[Math.floor(Math.random() * CHARS.length)];
+    return out;
+  }
+
+  // 把一行文本切成带颜色的片段（代码高亮）
+  var RE_TOKEN = /(\/\/[^\n]*)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\b(const|let|var|if|else|for|while|return|await|async|function|import|from|export|default|try|catch|throw|new|class|extends|true|false|null|undefined)\b|(\b\d+(?:\.\d+)?\b)|(\b[A-Za-z_]\w*(?=\())/g;
+
+  function tokenize(text) {
+    var tokens = [];
+    var last = 0;
+    var m;
+    RE_TOKEN.lastIndex = 0;
+    while ((m = RE_TOKEN.exec(text)) !== null) {
+      if (m.index > last) tokens.push({ t: text.slice(last, m.index), c: COL.plain });
+      if (m[1]) tokens.push({ t: m[1], c: COL.comment });
+      else if (m[2]) tokens.push({ t: m[2], c: COL.string });
+      else if (m[3]) tokens.push({ t: m[3], c: COL.keyword });
+      else if (m[4]) tokens.push({ t: m[4], c: COL.number });
+      else if (m[5]) tokens.push({ t: m[5], c: COL.fn });
+      last = RE_TOKEN.lastIndex;
+    }
+    if (last < text.length) tokens.push({ t: text.slice(last), c: COL.plain });
+
+    // 预计算宽度（font 固定，一次算好）
+    ctx.font = FONT;
+    for (var i = 0; i < tokens.length; i++) {
+      tokens[i].w = ctx.measureText(tokens[i].t).width;
+    }
+    return tokens;
+  }
+
+  var lines = [];
+
+  function makeLine(y) {
+    return { y: y, tokens: tokenize(randomText()) };
+  }
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    ctx.font = FONT;
+    lines = [];
+    var y = canvas.height;
+    while (y > -LINE_H) {
+      lines.push(makeLine(y));
+      y -= LINE_H;
+    }
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  function frame() {
+    // 纯黑清屏，不留拖尾
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.font = FONT;
+    ctx.textBaseline = 'top';
+
+    for (var i = 0; i < lines.length; i++) {
+      var L = lines[i];
+      L.y -= SPEED;
+
+      if (L.y < -LINE_H || L.y > canvas.height) continue;
+
+      // 越靠上越暗
+      var ratio = L.y / canvas.height;
+      var alpha = Math.max(0.15, Math.min(1, ratio * 1.05));
+      ctx.globalAlpha = alpha;
+
+      var x = 12;
+      for (var j = 0; j < L.tokens.length; j++) {
+        var seg = L.tokens[j];
+        if (x > canvas.width) break;
+        ctx.fillStyle = seg.c;
+        ctx.fillText(seg.t, x, L.y);
+        x += seg.w;
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // 删掉滚出顶部的
+    while (lines.length && lines[0].y < -LINE_H) {
+      lines.shift();
+    }
+
+    // 补行：底部不够就补到屏幕外
+    var lastY = lines.length ? lines[lines.length - 1].y : canvas.height;
+    while (lastY < canvas.height + LINE_H) {
+      lastY += LINE_H;
+      lines.push(makeLine(lastY));
+    }
+
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+</script>
+</body>
+</html>

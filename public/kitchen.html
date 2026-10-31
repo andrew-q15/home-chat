@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>👨‍🍳 赛博厨房</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #2c1e16; color: #f5f5f5; min-height: 100vh; padding: 20px; }
+  .header { text-align: center; margin-bottom: 24px; }
+  .header h1 { margin: 0 0 10px; color: #e67e22; text-shadow: 0 2px 10px rgba(230,126,34,0.4); }
+  .header a { color: #f39c12; text-decoration: none; font-size: 14px; }
+  
+  .panel { background: rgba(0,0,0,0.3); border-radius: 16px; padding: 20px; max-width: 600px; margin: 0 auto 20px; border: 1px solid #4a3428; }
+  .panel h2 { margin: 0 0 16px; font-size: 18px; color: #e67e22; }
+  
+  .inventory { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
+  .inv-item { background: #3e2b22; padding: 12px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; border: 2px solid transparent; min-width: 80px; }
+  .inv-item .emoji { font-size: 32px; margin-bottom: 6px; }
+  .inv-item .count { font-size: 12px; color: #aaa; font-weight: bold; }
+  .inv-item .controls { display: flex; gap: 6px; margin-top: 8px; }
+  .inv-item .controls button { width: 24px; height: 24px; border-radius: 50%; border: none; background: #e67e22; color: #fff; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .inv-item .controls button:disabled { background: #555; cursor: not-allowed; }
+  .inv-item .controls span { width: 20px; text-align: center; font-size: 14px; line-height: 24px; color: #f39c12; font-weight: bold; }
+  
+  .actions { text-align: center; }
+  .actions button { padding: 14px 40px; border: none; border-radius: 30px; background: #e67e22; color: #fff; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 15px rgba(230,126,34,0.4); }
+  .actions button:disabled { background: #555; cursor: not-allowed; box-shadow: none; color: #888; }
+  
+  /* 烹饪弹窗 */
+  #cook-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 100; align-items: center; justify-content: center; flex-direction: column; }
+  .cook-box { background: #2c1e16; padding: 30px; border-radius: 16px; width: 90%; max-width: 400px; text-align: center; border: 1px solid #4a3428; }
+  .cook-box h3 { color: #e67e22; margin-top: 0; }
+  .bar-container { margin: 20px 0; text-align: left; }
+  .bar-container label { font-size: 14px; color: #aaa; display: block; margin-bottom: 8px; }
+  .bar-bg { height: 24px; background: #111; border-radius: 12px; overflow: hidden; position: relative; cursor: pointer; }
+  .bar-good { position: absolute; left: 40%; width: 20%; height: 100%; background: rgba(46, 204, 113, 0.4); border-left: 2px solid #2ecc71; border-right: 2px solid #2ecc71; }
+  .bar-fill { height: 100%; background: #e67e22; width: 0%; transition: width 0.1s linear; }
+  
+  /* 菜谱列表 */
+  .recipe-card { background: #3e2b22; border-radius: 12px; padding: 16px; margin-bottom: 16px; border-left: 4px solid #e67e22; position: relative; }
+  .recipe-card h3 { margin: 0 0 8px; color: #f39c12; font-size: 18px; }
+  .recipe-card p { margin: 0 0 12px; color: #bbb; font-size: 14px; }
+  .recipe-card .ing { font-size: 20px; margin-bottom: 8px; }
+  .recipe-card .share-btn { background: rgba(46, 204, 113, 0.2); color: #2ecc71; border: 1px solid #2ecc71; padding: 6px 16px; border-radius: 6px; cursor: pointer; }
+  
+  /* 微信同款转发弹窗 */
+  #share-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+  .share-box { background: #2c2c2c; border-radius: 12px; width: 280px; overflow: hidden; animation: pop 0.2s ease-out; }
+  .share-box h3 { margin: 0; padding: 16px; text-align: center; font-size: 16px; border-bottom: 1px solid #444; color: #eee; }
+  .share-list { max-height: 250px; overflow-y: auto; }
+  .share-item { padding: 14px 20px; border-bottom: 1px solid #444; color: #ddd; cursor: pointer; font-size: 15px; }
+  .share-item:hover { background: #3a3a3a; color: #fff; }
+  .share-cancel { padding: 14px; text-align: center; color: #f88; cursor: pointer; font-weight: bold; border-top: 1px solid #444; }
+  
+  @keyframes pop { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>👨‍🍳 赛博厨房</h1>
+  <p>加点盐，加点酱油，火候全靠你的手感！</p>
+  <a href="/">← 返回聊天室</a>
+</div>
+
+<div class="panel">
+  <h2>🧺 我的食材筐</h2>
+  <div class="inventory" id="inv-list"></div>
+  <div class="actions">
+    <button id="cook-btn" disabled>起锅烧油！(选好食材)</button>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>📖 我的私密菜谱</h2>
+  <div id="recipe-list"></div>
+</div>
+
+<div id="cook-modal">
+  <div class="cook-box">
+    <h3>🍳 烹饪中...</h3>
+    <div class="bar-container">
+      <label>加盐火候 (停在绿区最完美)</label>
+      <div class="bar-bg" id="salt-bar">
+        <div class="bar-good"></div>
+        <div class="bar-fill" id="salt-fill"></div>
+      </div>
+    </div>
+    <div class="bar-container">
+      <label>加酱油火候</label>
+      <div class="bar-bg" id="soy-bar">
+        <div class="bar-good"></div>
+        <div class="bar-fill" id="soy-fill"></div>
+      </div>
+    </div>
+    <p style="font-size:12px; color:#888;">点击进度条定住指针，两次都定好后出锅。</p>
+  </div>
+</div>
+
+<!-- 转发频道弹窗 -->
+<div id="share-modal">
+  <div class="share-box">
+    <h3>选择频道分享</h3>
+    <div class="share-list" id="share-list"></div>
+    <div class="share-cancel" onclick="document.getElementById('share-modal').style.display='none'">取消</div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var token = localStorage.getItem('token');
+  var invData = {};
+  var selectedMap = {};
+  var saltScore = 0, soyScore = 0;
+  var currentShareRecipeId = null;
+
+  function loadInventory() {
+    fetch('/api/food/inventory', { headers: { 'Authorization': token } })
+      .then(r => r.json()).then(d => {
+        if (!d.ok) return;
+        invData = d.inventory || {};
+        renderInventory();
+      });
+  }
+
+  function renderInventory() {
+    var listEl = document.getElementById('inv-list');
+    var keys = Object.keys(invData);
+    if (keys.length === 0) { listEl.innerHTML = '空空如也'; return; }
+    
+    listEl.innerHTML = keys.map(emoji => {
+      var selCount = selectedMap[emoji] || 0;
+      return '<div class="inv-item">' +
+        '<span class="emoji">' + emoji + '</span>' +
+        '<span class="count">库存: ' + invData[emoji] + '</span>' +
+        '<div class="controls">' +
+          '<button onclick="changeCount(\'' + emoji + '\', -1)" ' + (selCount <= 0 ? 'disabled' : '') + '>-</button>' +
+          '<span>' + selCount + '</span>' +
+          '<button onclick="changeCount(\'' + emoji + '\', 1)" ' + (selCount >= invData[emoji] ? 'disabled' : '') + '>+</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    checkCookBtn();
+  }
+
+  window.changeCount = function(emoji, delta) {
+    var cur = selectedMap[emoji] || 0;
+    var totalSelected = Object.values(selectedMap).reduce((a,b)=>a+b, 0);
+    if (delta > 0 && totalSelected >= 4) { alert('最多只能放 4 样食材！'); return; }
+    
+    cur += delta;
+    if (cur <= 0) delete selectedMap[emoji];
+    else selectedMap[emoji] = cur;
+    renderInventory();
+  };
+
+  function checkCookBtn() {
+    var total = Object.values(selectedMap).reduce((a,b)=>a+b, 0);
+    document.getElementById('cook-btn').disabled = total === 0;
+  }
+
+  function loadRecipes() {
+    fetch('/api/food/recipes', { headers: { 'Authorization': token } })
+      .then(r => r.json()).then(d => {
+        if (!d.ok || !d.recipes) return;
+        var listEl = document.getElementById('recipe-list');
+        if (d.recipes.length === 0) return;
+        
+        listEl.innerHTML = d.recipes.map(r => {
+          return '<div class="recipe-card">' +
+            '<div class="ing">' + r.ingredients.join(' + ') + '</div>' +
+            '<h3>' + r.name + '</h3>' +
+            '<p>' + r.desc + '</p>' +
+            '<button class="share-btn" onclick="openShareModal(\'' + r.id + '\')">分享</button>' +
+          '</div>';
+        }).join('');
+      });
+  }
+
+  document.getElementById('cook-btn').onclick = function() {
+    document.getElementById('cook-modal').style.display = 'flex';
+    saltScore = 0; soyScore = 0;
+    startBar('salt');
+  };
+
+  function startBar(type) {
+    var fill = document.getElementById(type + '-fill');
+    var dir = 1;
+    var val = 0;
+    var timer = setInterval(function() {
+      val += dir * 3;
+      if (val >= 100) { val = 100; dir = -1; }
+      if (val <= 0) { val = 0; dir = 1; }
+      fill.style.width = val + '%';
+      if (type === 'salt') saltScore = val;
+      else soyScore = val;
+    }, 20);
+
+    document.getElementById(type + '-bar').onclick = function() {
+      clearInterval(timer);
+      this.onclick = null;
+      if (type === 'salt') startBar('soy');
+      else submitCook();
+    };
+  }
+
+  function submitCook() {
+    var ingredients = [];
+    for (var k in selectedMap) {
+      for (var i=0; i<selectedMap[k]; i++) ingredients.push(k);
+    }
+
+    document.getElementById('cook-modal').innerHTML = '<h2 style="color:#e67e22">AI 正在颠勺出锅...</h2>';
+
+    fetch('/api/food/cook', {
+      method: 'POST',
+      headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ingredients: ingredients, saltScore: saltScore, soyScore: soyScore })
+    }).then(r => r.json()).then(d => {
+      document.getElementById('cook-modal').style.display = 'none';
+      document.getElementById('cook-modal').innerHTML = `
+        <div class="cook-box">
+          <h3>🍳 烹饪中...</h3>
+          <div class="bar-container"><label>加盐火候</label><div class="bar-bg" id="salt-bar"><div class="bar-good"></div><div class="bar-fill" id="salt-fill"></div></div></div>
+          <div class="bar-container"><label>加酱油火候</label><div class="bar-bg" id="soy-bar"><div class="bar-good"></div><div class="bar-fill" id="soy-fill"></div></div></div>
+        </div>`;
+      if (d.ok) {
+        alert('🎉 出锅了！\n菜名：' + d.recipe.name + '\n' + d.recipe.desc);
+        selectedMap = {};
+        loadInventory();
+        loadRecipes();
+      } else { alert(d.msg); }
+    });
+  }
+
+  // 打开微信同款转发弹窗
+  window.openShareModal = function(id) {
+    currentShareRecipeId = id;
+    var modal = document.getElementById('share-modal');
+    var listEl = document.getElementById('share-list');
+    listEl.innerHTML = '<div style="padding:20px;text-align:center;color:#888">加载频道中...</div>';
+    modal.style.display = 'flex';
+
+    fetch('/api/food/channels', { headers: { 'Authorization': token } })
+      .then(r => r.json()).then(d => {
+        if (!d.ok || d.channels.length === 0) {
+          listEl.innerHTML = '<div style="padding:20px;text-align:center;color:#888">没有可用频道</div>';
+          return;
+        }
+        listEl.innerHTML = d.channels.map(ch => 
+          `<div class="share-item" onclick="confirmShare('${ch}')"># ${ch}</div>`
+        ).join('');
+      });
+  };
+
+  window.confirmShare = function(channel) {
+    document.getElementById('share-modal').style.display = 'none';
+    fetch('/api/food/share', {
+      method: 'POST',
+      headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipeId: currentShareRecipeId, channel: channel })
+    }).then(r => r.json()).then(d => {
+      if (d.ok) alert('已分享到 #' + channel);
+      else alert(d.msg);
+    });
+  };
+
+  loadInventory();
+  loadRecipes();
+})();
+</script>
+</body>
+</html>

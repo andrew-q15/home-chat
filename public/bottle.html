@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🍾 赛博漂流瓶</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #001f3f; color: #e0f7fa; font-family: -apple-system, "PingFang SC", sans-serif; min-height: 100vh; padding: 20px; overflow: hidden; }
+  .header { max-width: 500px; margin: 0 auto 20px; display: flex; justify-content: space-between; align-items: center; z-index: 10; position: relative; }
+  .header h1 { color: #00e5ff; font-size: 22px; }
+  .header a { color: #80deea; text-decoration: none; font-size: 14px; }
+  
+  .bg-wave { position: fixed; bottom: 0; left: 0; width: 100vw; height: 30vh; background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320"><path fill="%2300e5ff" fill-opacity="0.1" d="M0,192L48,176C96,160,192,128,288,144C384,160,480,224,576,213.3C672,203,768,117,864,101.3C960,85,1056,139,1152,165.3C1248,192,1344,192,1392,192L1440,192L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path></svg>'); background-size: cover; background-repeat: no-repeat; z-index: 0; pointer-events: none; }
+  
+  .panel { max-width: 500px; margin: 0 auto; background: rgba(0,51,102,0.6); border: 1px solid rgba(0,229,255,0.3); border-radius: 16px; padding: 24px; backdrop-filter: blur(10px); position: relative; z-index: 10; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+  
+  .throw-box { display: flex; gap: 10px; margin-bottom: 30px; }
+  .throw-box input { flex: 1; padding: 14px; border-radius: 10px; border: 1px solid #00e5ff; background: rgba(0,0,0,0.5); color: #fff; font-size: 15px; outline: none; }
+  .throw-box button { padding: 0 20px; border: none; border-radius: 10px; background: #00e5ff; color: #000; font-weight: bold; font-size: 15px; cursor: pointer; }
+  
+  .pick-area { text-align: center; min-height: 180px; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 1px dashed rgba(0,229,255,0.4); border-radius: 12px; padding: 20px; }
+  .bottle-text { font-size: 18px; line-height: 1.6; color: #fff; text-shadow: 0 0 10px rgba(0,229,255,0.5); margin-bottom: 10px; display: none; }
+  .bottle-time { font-size: 12px; color: #80deea; display: none; margin-bottom: 20px; }
+  .btn-pick { padding: 12px 40px; border: 2px solid #00e5ff; background: transparent; color: #00e5ff; border-radius: 30px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+  .btn-pick:hover { background: #00e5ff; color: #000; box-shadow: 0 0 20px rgba(0,229,255,0.4); }
+  
+  #toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #00e5ff; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #00e5ff; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="bg-wave"></div>
+<div class="header"><h1>🍾 赛博漂流瓶</h1><a href="/">← 返回聊天室</a></div>
+<div class="panel">
+  <div class="throw-box">
+    <input id="txt" type="text" placeholder="写下一句话扔进海里..." maxlength="200" onkeydown="if(event.key==='Enter') __throw()">
+    <button onclick="__throw()">扔出</button>
+  </div>
+  <div class="pick-area">
+    <div class="bottle-text" id="b-text"></div>
+    <div class="bottle-time" id="b-time"></div>
+    <button class="btn-pick" id="btn-pick" onclick="__pick()">🌊 捞一个漂流瓶</button>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+const token = localStorage.getItem('token');
+if (!token) location.href = '/';
+function toast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500); }
+
+window.__throw = async function() {
+  const txt = document.getElementById('txt').value.trim();
+  if (!txt) return toast('不能扔空瓶子');
+  const d = await fetch('/api/bottle/throw', {
+    method: 'POST', headers: { Authorization: token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: txt })
+  }).then(r => r.json());
+  if (d.ok) { document.getElementById('txt').value = ''; toast('🍾 扔进海里了！'); }
+  else toast(d.msg);
+};
+
+window.__pick = async function() {
+  const btn = document.getElementById('btn-pick');
+  const textEl = document.getElementById('b-text');
+  const timeEl = document.getElementById('b-time');
+  
+  btn.disabled = true; btn.textContent = '正在打捞...';
+  textEl.style.display = 'none'; timeEl.style.display = 'none';
+
+  const d = await fetch('/api/bottle/pick', { headers: { Authorization: token } }).then(r => r.json());
+  btn.disabled = false; btn.textContent = '🌊 再捞一个';
+  
+  if (d.ok) {
+    textEl.textContent = '“ ' + d.bottle.text + ' ”';
+    const date = new Date(d.bottle.time);
+    timeEl.textContent = '—— 扔出于 ' + date.toLocaleDateString();
+    textEl.style.display = 'block'; timeEl.style.display = 'block';
+  } else {
+    toast(d.msg);
+    btn.textContent = '🌊 捞一个漂流瓶';
+  }
+};
+</script>
+</body>
+</html>

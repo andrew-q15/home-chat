@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⛰️ 徒步装备轻量化计算器</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #1e272e; color: #d2dae2; font-family: -apple-system, sans-serif; padding: 20px; display: flex; justify-content: center; min-height: 100vh;}
+  .box { width: 100%; max-width: 600px; background: #2f3640; border-radius: 12px; padding: 24px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); height: fit-content;}
+  .header { display: flex; justify-content: space-between; border-bottom: 1px solid #485460; padding-bottom: 15px; margin-bottom: 20px; }
+  .header h1 { color: #0be881; font-size: 20px; }
+  .header a { color: #808e9b; text-decoration: none; }
+  .add-form { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;}
+  input, select { padding: 10px; border-radius: 6px; border: none; outline: none; background: #1e272e; color: #fff; font-size: 14px;}
+  input[name="name"] { flex: 1; min-width: 100px;}
+  input[name="weight"] { width: 80px;}
+  button { padding: 10px 20px; border-radius: 6px; border: none; background: #0be881; color: #1e272e; font-weight: bold; cursor: pointer; }
+  button:active { transform: scale(0.95); }
+  ul { list-style: none; margin-bottom: 20px; }
+  li { display: flex; justify-content: space-between; padding: 10px; background: #1e272e; margin-bottom: 8px; border-radius: 6px; font-size: 14px; align-items: center; }
+  li .del { color: #ff3f34; cursor: pointer; font-weight: bold; }
+  .total { font-size: 18px; font-weight: bold; color: #0be881; text-align: right; margin-bottom: 20px; }
+  .analysis-box { background: #05c46b; color: #fff; padding: 15px; border-radius: 8px; font-size: 15px; line-height: 1.6; display: none; }
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="header">
+    <h1>⛰️ 徒步装备轻量化</h1>
+    <a href="/">← 返回</a>
+  </div>
+
+  <div class="add-form">
+    <input type="text" id="item-name" placeholder="装备名称 (如: 帐篷)">
+    <select id="item-cat">
+      <option value="背负">背负</option>
+      <option value="睡眠">睡眠</option>
+      <option value="衣物">衣物</option>
+      <option value="炊具">炊具</option>
+      <option value="电子">电子</option>
+      <option value="其他">其他</option>
+    </select>
+    <input type="number" id="item-weight" placeholder="克(g)">
+    <button onclick="__addItem()">添加</button>
+  </div>
+
+  <ul id="item-list"></ul>
+  <div class="total" id="total-weight">基础总重量: 0 g</div>
+  <button style="width: 100%;" onclick="__analyze()">生成 AI 轻量化报告</button>
+
+  <div class="analysis-box" id="analysis-box"></div>
+</div>
+
+<script>
+let myToken = localStorage.getItem('token');
+let items = [];
+
+function calcTotal() {
+  let t = items.reduce((sum, item) => sum + Number(item.weight), 0);
+  document.getElementById('total-weight').innerText = `基础总重量: ${t} g (约 ${(t/1000).toFixed(2)} kg)`;
+}
+
+function render() {
+  const list = document.getElementById('item-list');
+  list.innerHTML = items.map((it, idx) => `
+    <li>
+      <span>[${it.category}] ${it.name} - ${it.weight}g</span>
+      <span class="del" onclick="__del(${idx})">删除</span>
+    </li>
+  `).join('');
+  calcTotal();
+}
+
+window.__addItem = function() {
+  const name = document.getElementById('item-name').value.trim();
+  const cat = document.getElementById('item-cat').value;
+  const weight = document.getElementById('item-weight').value;
+  if (!name || !weight) return alert('请填写完整');
+  items.push({ name, category: cat, weight: Number(weight) });
+  document.getElementById('item-name').value = '';
+  document.getElementById('item-weight').value = '';
+  render();
+};
+
+window.__del = function(idx) {
+  items.splice(idx, 1);
+  render();
+};
+
+window.__analyze = async function() {
+  if (items.length === 0) return alert('请先添加装备');
+  document.getElementById('analysis-box').style.display = 'block';
+  document.getElementById('analysis-box').innerText = 'AI 专家正在计算并给出建议...';
+
+  try {
+    const res = await fetch('/api/hiking/analyze', {
+      method: 'POST', headers: { 'Authorization': myToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items })
+    });
+    const d = await res.json();
+    if (d.ok) {
+      document.getElementById('analysis-box').innerText = d.analysis;
+    } else {
+      document.getElementById('analysis-box').innerText = '分析失败: ' + d.msg;
+    }
+  } catch(e) { document.getElementById('analysis-box').innerText = '网络错误'; }
+};
+
+// 初始化加载
+fetch('/api/hiking', { headers: { 'Authorization': myToken } }).then(r=>r.json()).then(d => {
+  if(d.ok && d.items.length > 0) { items = d.items; render(); }
+});
+</script>
+</body>
+</html>

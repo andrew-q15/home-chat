@@ -1,0 +1,54 @@
+# 数据文件（任务卡全部清单）
+data.json
+lobster.json
+intel.json
+intel-en.json
+food.json
+market.json
+writings.json
+quiz.json
+koi.json
+lottery-game.json
+wishes.json
+achievements.json
+stock.json
+lists.json
+board.json
+stickers.json
+sonar.json
+vault.json
+api-hub.json
+memory.json
+observations.json
+money-ledger.json
+intel-members.json
+posts.json
+calendar.json
+bottles.json
+wall.json
+fortune.json
+hiking.json
+
+# 上传和生成目录
+public/uploads/
+public/avatars/
+public/stickers/
+public/list-icons/
+
+# 备份和证书
+backups/
+certs/
+
+# 依赖
+node_modules/
+
+# 备份文件
+*.bak-*
+
+# 状态文件
+.last-ip
+
+# 系统/缓存
+__pycache__/
+.DS_Store
+.bak/

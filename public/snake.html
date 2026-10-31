@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🐍 3D 联机贪吃蛇</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: -apple-system, "PingFang SC", sans-serif; }
+  #game { width: 100vw; height: 100vh; display: block; }
+  #hud {
+    position: fixed; top: 12px; left: 12px; color: #fff; font-size: 13px;
+    background: rgba(0,0,0,.55); padding: 10px 14px; border-radius: 8px;
+    border: 1px solid rgba(120,220,160,.4); pointer-events: none;
+  }
+  #hud .score { color: #2ecc40; font-weight: 700; font-size: 18px; }
+  #hud .info { color: #aaa; margin-top: 4px; }
+  #dead {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.7); z-index: 10;
+  }
+  #dead.show { display: flex; }
+  #dead-box {
+    background: #111; border: 2px solid #2ecc40; border-radius: 14px;
+    padding: 30px 40px; text-align: center; color: #fff;
+  }
+  #dead-box h2 { color: #ff7b72; margin-bottom: 12px; }
+  #dead-box button {
+    margin-top: 16px; padding: 12px 32px; background: #2ecc40; color: #000;
+    border: none; border-radius: 8px; font-weight: 700; font-size: 16px; cursor: pointer;
+  }
+  #back {
+    position: fixed; top: 12px; right: 12px; color: #2ecc40; text-decoration: none;
+    background: rgba(0,0,0,.55); padding: 8px 14px; border-radius: 8px;
+    border: 1px solid rgba(120,220,160,.4); font-size: 13px;
+  }
+  #tip {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    color: #aaa; font-size: 12px; background: rgba(0,0,0,.5); padding: 6px 16px; border-radius: 20px;
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div>分数：<span class="score" id="score">0</span></div>
+  <div class="info" id="info">等待连接…</div>
+</div>
+
+<a id="back" href="/">← 返回</a>
+<div id="tip">WASD / 方向键 控制 · 撞墙或撞到别人就死</div>
+
+<div id="dead">
+  <div id="dead-box">
+    <h2>💀 你死了</h2>
+    <div>撞墙 / 撞到自己 / 撞到别人</div>
+    <button id="respawn">免费复活</button>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script type="module">
+import * as THREE from '/lib/three.module.js';
+console.log('✅ snake module 已加载，THREE 版本:', THREE.REVISION);
+
+const token = localStorage.getItem('token');
+if (!token) { location.href = '/'; }
+
+const canvas = document.getElementById('game');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+if (isMobile) { renderer.shadowMap.enabled = false; } else { renderer.shadowMap.enabled = true; }
+const mobileShadowDisabled = isMobile;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;  // 手动更新，省性能
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05080c);
+scene.fog = new THREE.Fog(0x05080c, 30, 70);
+
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 200);
+
+// 光照
+const ambient = new THREE.AmbientLight(0x6688aa, 0.6);
+scene.add(ambient);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.1);
+dirLight.position.set(10, 20, 8);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.set(1024, 1024);
+dirLight.shadow.camera.left = -30;
+dirLight.shadow.camera.right = 30;
+dirLight.shadow.camera.top = 30;
+dirLight.shadow.camera.bottom = -30;
+dirLight.shadow.camera.near = 1;
+dirLight.shadow.camera.far = 60;
+scene.add(dirLight);
+
+const fillLight = new THREE.PointLight(0x3a7cff, 0.4, 40);
+fillLight.position.set(-10, 8, -10);
+scene.add(fillLight);
+
+// 地面
+let groundMesh = null;
+function buildGround(size) {
+  if (groundMesh) { scene.remove(groundMesh); groundMesh.geometry.dispose(); groundMesh.material.dispose(); }
+  const geo = new THREE.PlaneGeometry(size, size);
+  const mat = new THREE.MeshStandardMaterial({ color: 0x0a1420, roughness: 0.9, metalness: 0.1 });
+  groundMesh = new THREE.Mesh(geo, mat);
+  groundMesh.rotation.x = -Math.PI / 2;
+  groundMesh.position.set(size / 2 - 0.5, -0.5, size / 2 - 0.5);
+  groundMesh.receiveShadow = true;
+  scene.add(groundMesh);
+
+  // 网格线
+  const grid = new THREE.GridHelper(size, size, 0x1e3a5f, 0x122033);
+  grid.position.set(size / 2 - 0.5, -0.49, size / 2 - 0.5);
+  scene.add(grid);
+  if (groundMesh.userData.grid) scene.remove(groundMesh.userData.grid);
+  groundMesh.userData.grid = grid;
+}
+
+// 食物
+const foodGroup = new THREE.Group();
+scene.add(foodGroup);
+const foodGeo = new THREE.SphereGeometry(0.35, 16, 12);
+const foodMat = new THREE.MeshStandardMaterial({
+  color: 0xff4444, emissive: 0xff2222, emissiveIntensity: 1.4, roughness: 0.3,
+});
+
+// 蛇
+const snakes = {};  // id -> { group, segments: [], targetBody, targetAlive, color }
+const capsuleGeo = new THREE.CapsuleGeometry(0.42, 0.16, 6, 12);
+const headGeo = new THREE.SphereGeometry(0.5, 16, 12);
+
+function makeSnake(id, data) {
+  if (snakes[id]) return snakes[id];
+  const group = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(data.color),
+    roughness: 0.35, metalness: 0.25,
+    emissive: new THREE.Color(data.color), emissiveIntensity: 0.25,
+  });
+  const headMat = mat.clone();
+  headMat.emissiveIntensity = 0.6;
+
+  const s = { id, group, segments: [], targetBody: data.body, targetAlive: true, mat, headMat, name: data.name };
+  scene.add(group);
+  snakes[id] = s;
+  return s;
+}
+
+function syncSnakeSegments(s, body) {
+  while (s.segments.length < body.length) {
+    const i = s.segments.length;
+    const mesh = new THREE.Mesh(i === 0 ? headGeo : capsuleGeo, i === 0 ? s.headMat : s.mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = false;
+    if (i === 0) mesh.scale.set(1, 1, 1.1);
+    s.group.add(mesh);
+    s.segments.push(mesh);
+  }
+  while (s.segments.length > body.length) {
+    const m = s.segments.pop();
+    s.group.remove(m);
+  }
+}
+
+function removeSnake(id) {
+  const s = snakes[id];
+  if (!s) return;
+  scene.remove(s.group);
+  s.segments.forEach(m => { m.geometry && m.geometry !== capsuleGeo && m.geometry !== headGeo && m.geometry.dispose(); });
+  s.mat.dispose();
+  s.headMat.dispose();
+  delete snakes[id];
+}
+
+// 相机跟随
+let myId = null;
+const camTarget = new THREE.Vector3();
+const camLook = new THREE.Vector3();
+
+// 联机
+const socket = io({ auth: { token } });
+
+socket.on('connect', () => {
+  socket.emit('snake_join');
+  document.getElementById('info').textContent = '已连接，等待其他玩家…';
+});
+
+socket.on('snake_state', (state) => {
+  buildGround(state.mapSize);
+
+  // 食物
+  while (foodGroup.children.length > state.food.length) {
+    const m = foodGroup.children.pop();
+    foodGroup.remove(m);
+  }
+  while (foodGroup.children.length < state.food.length) {
+    const m = new THREE.Mesh(foodGeo, foodMat);
+    m.castShadow = true;
+    foodGroup.add(m);
+  }
+  state.food.forEach((f, i) => {
+    foodGroup.children[i].position.set(f.x, 0.4, f.y);
+  });
+
+  const seen = new Set();
+  for (const id in state.players) {
+    const p = state.players[id];
+    seen.add(id);
+    const s = makeSnake(id, p);
+    s.targetBody = p.body;
+    s.targetAlive = p.alive;
+    syncSnakeSegments(s, p.body);
+    s.group.visible = p.alive;
+  }
+  for (const id in snakes) {
+    if (!seen.has(id)) removeSnake(id);
+  }
+
+  // 我的 id：通过名字匹配（同一 socket 加入时服务端用 socket.data.name）
+  if (!myId || !state.players[myId]) {
+    // socket.id 就是服务端 key
+    if (state.players[socket.id]) myId = socket.id;
+    else {
+      // 兜底：找同名
+      for (const id in state.players) {
+        if (state.players[id].name === (window.__myName || '')) { myId = id; break; }
+      }
+    }
+  }
+
+  const me = myId && state.players[myId];
+  if (me) {
+    document.getElementById('score').textContent = me.score;
+    if (!me.alive) {
+      document.getElementById('dead').classList.add('show');
+    } else {
+      document.getElementById('dead').classList.remove('show');
+    }
+    document.getElementById('info').textContent = '在线 ' + Object.keys(state.players).length + ' 人 · 地图 ' + state.mapSize;
+  } else {
+    document.getElementById('info').textContent = '在线 ' + Object.keys(state.players).length + ' 人 · 地图 ' + state.mapSize;
+  }
+
+  renderer.shadowMap.needsUpdate = true;
+});
+
+// 键盘
+const dirMap = {
+  ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 },
+  ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 },
+  KeyW: { x: 0, y: -1 }, KeyS: { x: 0, y: 1 },
+  KeyA: { x: -1, y: 0 }, KeyD: { x: 1, y: 0 }, KeyL: { x: 1, y: 0 },
+};
+// 点击画布时自动聚焦，确保键盘事件被页面接收
+canvas.addEventListener('click', () => canvas.focus());
+canvas.setAttribute('tabindex', '0');
+
+window.addEventListener('keydown', (e) => {
+  const d = dirMap[e.code];
+  if (d) {
+    e.preventDefault();
+    socket.emit('snake_dir', d);
+  }
+});
+
+// 触屏：滑动方向
+
+// === 虚拟摇杆逻辑 ===
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+const joyZone = document.getElementById('joystick-zone');
+const joyStick = document.getElementById('joystick-stick');
+
+if (isMobile && joyZone && joyStick) {
+  joyZone.style.display = 'block';
+  
+  let isDragging = false;
+  let centerX = 0, centerY = 0;
+  
+  joyZone.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const rect = joyZone.getBoundingClientRect();
+    centerX = rect.left + rect.width / 2;
+    centerY = rect.top + rect.height / 2;
+    isDragging = true;
+  }, { passive: false });
+
+  window.addEventListener('touchmove', (e) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    
+    // 获取手指相对于中心的偏移
+    const touch = e.touches[0];
+    let dx = touch.clientX - centerX;
+    let dy = touch.clientY - centerY;
+    
+    // 限制摇杆头移动范围 (最大半径 35px)
+    const maxDist = 35;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist > maxDist) {
+      dx = (dx / dist) * maxDist;
+      dy = (dy / dist) * maxDist;
+    }
+    
+    // 移动摇杆头 UI
+    joyStick.style.transform = `translate(${dx}px, ${dy}px)`;
+    
+    // 判断方向 (死区 10px 防抖)
+    if (dist > 10) {
+      if (Math.abs(dx) > Math.abs(dy)) {
+        // 左右
+        if (dx > 0) socket.emit('snake_dir', { x: 1, y: 0 }); // 右
+        else socket.emit('snake_dir', { x: -1, y: 0 });       // 左
+      } else {
+        // 上下
+        if (dy > 0) socket.emit('snake_dir', { x: 0, y: 1 });  // 下
+        else socket.emit('snake_dir', { x: 0, y: -1 });        // 上
+      }
+    }
+  }, { passive: false });
+
+  window.addEventListener('touchend', () => {
+    isDragging = false;
+    joyStick.style.transform = 'translate(0px, 0px)'; // 摇杆回正
+  });
+}
+
+
+document.getElementById('respawn').onclick = () => {
+  socket.emit('snake_respawn');
+  document.getElementById('dead').classList.remove('show');
+};
+
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+});
+
+// 渲染循环（平滑插值）
+const clock = new THREE.Clock();
+let foodSpin = 0;
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  foodSpin += 0.03;
+  foodGroup.children.forEach((f, i) => {
+    f.rotation.y = foodSpin + i;
+    f.position.y = 0.4 + Math.sin(t * 2 + i) * 0.1;
+  });
+
+  // 蛇身平滑插值
+  for (const id in snakes) {
+    const s = snakes[id];
+    if (!s.targetBody) continue;
+    const body = s.targetBody;
+    for (let i = 0; i < s.segments.length && i < body.length; i++) {
+      const seg = s.segments[i];
+      const target = body[i];
+      const tx = target.x, tz = target.y;
+      if (seg.position.x === 0 && seg.position.z === 0 && i === 0) {
+        seg.position.set(tx, 0, tz);
+      } else {
+        seg.position.x += (tx - seg.position.x) * 0.35;
+        seg.position.z += (tz - seg.position.z) * 0.35;
+      }
+      seg.position.y = 0.5;
+    }
+  }
+
+  // 相机跟随我的蛇头（指数平滑，帧率无关，不抖）
+  const me = myId && snakes[myId];
+  if (me && me.segments[0]) {
+    const head = me.segments[0].position;
+    camTarget.set(head.x, head.y + 18, head.z + 15);
+    const k = 1 - Math.pow(0.001, 1 / 60);  // 平滑系数
+    camera.position.x += (camTarget.x - camera.position.x) * k;
+    camera.position.y += (camTarget.y - camera.position.y) * k;
+    camera.position.z += (camTarget.z - camera.position.z) * k;
+    camera.lookAt(head.x, head.y, head.z);
+  } else {
+    camera.position.set(10, 20, 20);
+    camera.lookAt(10, 0, 10);
+  }
+
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+
+<!-- 手机端虚拟摇杆 -->
+<div id="joystick-zone" style="display:none; position:fixed; bottom:30px; left:30px; width:120px; height:120px; background:rgba(255,255,255,0.1); border:2px solid rgba(255,255,255,0.3); border-radius:50%; z-index:9999; touch-action:none;">
+  <div id="joystick-stick" style="position:absolute; top:35px; left:35px; width:50px; height:50px; background:rgba(46,204,64,0.8); border-radius:50%; box-shadow:0 0 10px rgba(46,204,64,0.5);"></div>
+</div>
+
+<script src="/invite.js"></script>
+</body>
+</html>

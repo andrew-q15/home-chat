@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🧱 匿名留言墙</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #1a1a2e; color: #e2e8f0; font-family: -apple-system, "PingFang SC", sans-serif; min-height: 100vh; padding: 20px; }
+  .header { max-width: 600px; margin: 0 auto 20px; display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { color: #e94560; font-size: 22px; }
+  .header a { color: #94a3b8; text-decoration: none; font-size: 14px; }
+  .post-box { max-width: 600px; margin: 0 auto 20px; display: flex; gap: 10px; }
+  .post-box input { flex: 1; padding: 14px; border-radius: 10px; border: 2px solid #334155; background: #0f172a; color: #fff; font-size: 15px; outline: none; }
+  .post-box input:focus { border-color: #e94560; }
+  .post-box button { padding: 0 24px; border: none; border-radius: 10px; background: #e94560; color: #fff; font-weight: bold; font-size: 15px; cursor: pointer; }
+  .post-box button:active { transform: scale(.96); }
+  .wall-grid { max-width: 600px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+  .wall-card { background: #16213e; border-radius: 12px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; gap: 16px; box-shadow: 0 4px 10px rgba(0,0,0,.2); }
+  .wall-text { font-size: 16px; line-height: 1.5; color: #f8fafc; word-break: break-all; }
+  .wall-action { display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; color: #94a3b8; transition: .2s; }
+  .wall-action:hover { color: #e94560; }
+  .wall-action.active { color: #e94560; }
+  .wall-action span { font-size: 14px; font-weight: bold; }
+  #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #e94560; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #e94560; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="header"><h1>🧱 匿名留言墙</h1><a href="/">← 返回聊天室</a></div>
+<div class="post-box">
+  <input id="txt" type="text" placeholder="写点什么吧（匿名公开）..." maxlength="100" onkeydown="if(event.key==='Enter') __post()">
+  <button onclick="__post()">发布</button>
+</div>
+<div class="wall-grid" id="list">加载中...</div>
+<div id="toast"></div>
+<script>
+const token = localStorage.getItem('token');
+if (!token) location.href = '/';
+function toast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500); }
+let myId = localStorage.getItem('user_id') || '';
+
+async function load() {
+  const d = await fetch('/api/wall', { headers: { Authorization: token } }).then(r => r.json());
+  if (!d.ok) return;
+  const me = d.me || null;
+  const canDelete = (w) => me && (me.isSuperAdmin || (w.userId && w.userId === me.userId) || (w.author && w.author === me.username));
+  document.getElementById('list').innerHTML = d.wall.map(w => {
+    const active = w.likedBy.includes(myId) ? 'active' : '';
+    const delBtn = canDelete(w)
+      ? `<div class="wall-action" onclick="__del('${w.id}')" style="color:#e94560"><span>🗑</span><span>删</span></div>`
+      : '';
+    return `<div class="wall-card">
+      <div class="wall-text">${w.text.replace(/</g,'&lt;')}</div>
+      <div style="display:flex;gap:14px;align-items:center">
+        ${delBtn}
+        <div class="wall-action ${active}" onclick="__like('${w.id}')">
+          <span>❤️</span>
+          <span>${w.likes}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+window.__post = async function() {
+  const txt = document.getElementById('txt').value.trim();
+  if (!txt) return toast('内容不能为空');
+  const btn = document.querySelector('.post-box button');
+  btn.disabled = true;
+  const d = await fetch('/api/wall', {
+    method: 'POST', headers: { Authorization: token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: txt })
+  }).then(r => r.json());
+  btn.disabled = false;
+  if (d.ok) { document.getElementById('txt').value = ''; load(); toast('发布成功！'); }
+  else toast(d.msg);
+};
+
+window.__like = async function(id) {
+  const d = await fetch('/api/wall/' + id + '/like', {
+    method: 'POST', headers: { Authorization: token }
+  }).then(r => r.json());
+  if (d.ok) load();
+};
+
+window.__del = async function(id) {
+  if (!confirm('确定删除这条留言？')) return;
+  const r = await fetch('/api/wall/' + id, {
+    method: 'DELETE',
+    headers: { Authorization: token }
+  });
+  const d = await r.json();
+  if (d.ok) toast('已删除');
+  else toast(d.msg || '删除失败');
+  load();
+};
+
+const socket = io({ auth: { token } });
+socket.on('wall_new', () => load());
+socket.on('wall_deleted', () => load());
+load();
+</script>
+</body>
+</html>

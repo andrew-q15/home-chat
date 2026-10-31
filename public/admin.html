@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>👑 赛博总控台</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 20px; }
+  .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 16px; margin-bottom: 24px; }
+  .header h1 { margin: 0; font-size: 24px; color: #38bdf8; text-shadow: 0 0 10px rgba(56,189,248,0.5); }
+  .header a { color: #94a3b8; text-decoration: none; font-size: 14px; }
+  
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 30px; }
+  .stat-card { background: #1e293b; padding: 20px; border-radius: 12px; border: 1px solid #334155; text-align: center; }
+  .stat-card .label { color: #94a3b8; font-size: 14px; margin-bottom: 8px; }
+  .stat-card .value { font-size: 28px; font-weight: bold; color: #f8fafc; }
+  .stat-card.highlight .value { color: #fbbf24; }
+
+  .user-table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 12px; overflow: hidden; }
+  .user-table th, .user-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #334155; }
+  .user-table th { background: #0f172a; color: #94a3b8; font-weight: normal; font-size: 14px; }
+  .user-table tr:last-child td { border-bottom: none; }
+  .user-table tbody tr { cursor: pointer; transition: background 0.2s; }
+  .user-table tbody tr:hover { background: #334155; }
+  
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; background: #334155; color: #cbd5e1; margin-left: 6px; }
+  .badge.admin { background: #fbbf24; color: #000; }
+  .badge.banned { background: #ef4444; color: #fff; }
+
+  /* 弹出控制台 */
+  #user-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center; }
+  .modal-box { background: #1e293b; border: 1px solid #475569; border-radius: 16px; width: 90%; max-width: 400px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+  .modal-box h2 { margin: 0 0 20px; color: #38bdf8; font-size: 20px; text-align: center; }
+  
+  .action-group { margin-bottom: 20px; background: #0f172a; padding: 16px; border-radius: 8px; }
+  .action-group h3 { margin: 0 0 12px; font-size: 14px; color: #cbd5e1; }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn-row button { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: bold; flex: 1; }
+  
+  .btn-orange { background: #f59e0b; color: #fff; }
+  .btn-food { background: #10b981; color: #fff; }
+  .btn-close { background: #475569; color: #fff; width: 100%; padding: 12px; margin-top: 10px; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; }
+  
+  /* 食材选择器 */
+  .food-selector { display: flex; gap: 8px; margin-bottom: 10px; }
+  .food-selector select { flex: 2; padding: 8px; border-radius: 6px; background: #1e293b; color: #fff; border: 1px solid #475569; outline: none; }
+  .food-selector input { flex: 1; width: 60px; padding: 8px; border-radius: 6px; background: #1e293b; color: #fff; border: 1px solid #475569; outline: none; }
+  .food-selector button { flex: 1; background: #8b5cf6; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+</style>
+</head>
+<body>
+<!-- 用户特权管理面板 -->
+<div style="background:#fff; border:2px solid #f39c12; border-radius:12px; padding:20px; margin:20px; box-shadow:0 4px 12px rgba(0,0,0,0.1); font-family:sans-serif;">
+  <h2 style="margin-bottom:10px; color:#333;">👑 用户特权管理</h2>
+  <p style="font-size:12px; color:#666; margin-bottom:15px;">在此设置用户的专属特权，勾选/输入后点击保存生效。</p>
+  
+  <div style="display:flex; gap:10px; margin-bottom:15px;">
+    <select id="priv-user-select" style="flex:1; padding:10px; border-radius:6px; border:1px solid #ccc;">
+      <option value="">加载用户列表中...</option>
+    </select>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:12px; background:#f9f9f9; padding:15px; border-radius:8px;">
+    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+      <input type="checkbox" id="priv-vip" style="width:18px; height:18px;">
+      <span>开启 <b>VIP 汇率</b>（龙虾 1000 token = 1 橘子）</span>
+    </label>
+    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+      <input type="checkbox" id="priv-elder" style="width:18px; height:18px;">
+      <span>开启 <b>长辈模式</b>（英文情报局大字版）</span>
+    </label>
+    
+    <div style="border-top:1px dashed #ccc; margin-top:5px; padding-top:12px; display:flex; align-items:center; gap:10px;">
+      <span style="font-size:14px;">💰 自定义折扣 (0~1)：</span>
+      <input type="number" id="priv-discount" step="0.1" min="0" max="1" value="1" style="width:80px; padding:6px; border:1px solid #ccc; border-radius:6px;">
+      <span style="font-size:12px; color:#999;">（例：填 0.1 即为 1 折）</span>
+    </div>
+  </div>
+
+  <button onclick="__saveUserPrivs()" style="margin-top:20px; width:100%; padding:12px; background:#f39c12; color:#fff; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:16px;">保存特权设置</button>
+
+  <hr style="margin:20px 0; border:none; border-top:1px dashed #ccc;">
+
+  <h3 style="margin-bottom:10px; font-size:16px;">🔐 重置该用户的密码</h3>
+  <div style="display:flex; gap:10px;">
+    <input type="text" id="priv-new-pwd" placeholder="输入新密码 (至少3位)" style="flex:1; padding:10px; border-radius:6px; border:1px solid #ccc;">
+    <button onclick="__resetPassword()" style="padding:10px 20px; background:#e74c3c; color:#fff; border:none; border-radius:6px; cursor:pointer; font-weight:bold;">重置</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  let allUsersList = [];
+
+  window.__loadUsers = async function() {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/lobster/admin/users', { headers: { 'Authorization': token } });
+      const d = await res.json();
+      if (d.ok) {
+        allUsersList = d.users;
+        const sel = document.getElementById('priv-user-select');
+        if(!sel) return;
+        sel.innerHTML = '<option value="">-- 请选择用户 --</option>' + 
+          d.users.map(u => `<option value="${u.name}">${u.name}</option>`).join('');
+        sel.onchange = window.__updateCheckboxes;
+      }
+    } catch(e) {}
+  };
+
+  window.__updateCheckboxes = function() {
+    const uname = document.getElementById('priv-user-select').value;
+    const user = allUsersList.find(u => u.name === uname);
+    if (user) {
+      document.getElementById('priv-vip').checked = user.isVip;
+      document.getElementById('priv-elder').checked = user.isElder;
+      document.getElementById('priv-discount').value = user.customDiscount;
+    } else {
+      document.getElementById('priv-vip').checked = false;
+      document.getElementById('priv-elder').checked = false;
+      document.getElementById('priv-discount').value = 1;
+    }
+  };
+
+  window.__resetPassword = async function() {
+    const uname = document.getElementById('priv-user-select').value;
+    const newPwd = document.getElementById('priv-new-pwd').value.trim();
+    if (!uname) return alert('请先选择用户');
+    if (!newPwd || newPwd.length < 3) return alert('密码至少 3 位');
+    
+    if (!confirm('确定把 ' + uname + ' 的密码重置为：' + newPwd + ' 吗？')) return;
+    
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/admin/reset-pwd', {
+        method: 'POST', headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetName: uname, newPassword: newPwd })
+      });
+      const d = await res.json();
+      if (d.ok) {
+        alert('✅ 密码重置成功！请告诉他新密码。');
+        document.getElementById('priv-new-pwd').value = '';
+      } else {
+        alert('重置失败: ' + d.msg);
+      }
+    } catch(e) {
+      alert('网络错误');
+    }
+  };
+
+  window.__saveUserPrivs = async function() {
+    const uname = document.getElementById('priv-user-select').value;
+    if (!uname) return alert('请先选择用户');
+    const isVip = document.getElementById('priv-vip').checked;
+    const isElder = document.getElementById('priv-elder').checked;
+    const discount = Number(document.getElementById('priv-discount').value);
+    const token = localStorage.getItem('token');
+
+    try {
+      await fetch('/api/admin/vip-token', {
+        method: 'POST', headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetName: uname, isVip })
+      });
+      await fetch('/api/admin/elder-mode', {
+        method: 'POST', headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetName: uname, isElder })
+      });
+      await fetch('/api/admin/custom-discount', {
+        method: 'POST', headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetName: uname, discount })
+      });
+      
+      alert('✅ ' + uname + ' 的特权已更新');
+      window.__loadUsers();
+    } catch(e) {
+      alert('网络错误');
+    }
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(window.__loadUsers, 500);
+  });
+})();
+</script>
+
+
+<div class="header">
+  <h1>👑 赛博总控台 (老板专属)</h1>
+  <a href="/">← 返回聊天室</a>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card"><div class="label">总用户数</div><div class="value" id="stat-users">-</div></div>
+  <div class="stat-card highlight"><div class="label">全服橘子总量</div><div class="value" id="stat-oranges">-</div></div>
+  <div class="stat-card"><div class="label">总消息数</div><div class="value" id="stat-msgs">-</div></div>
+  <div class="stat-card"><div class="label">情报局存量</div><div class="value" id="stat-intel">-</div></div>
+</div>
+
+<div style="background: #1e293b; border-radius: 12px; overflow: hidden; border: 1px solid #334155;">
+  <table class="user-table">
+    <thead>
+      <tr>
+        <th>用户 (点击行进行管理)</th>
+        <th>橘子余额</th>
+        <th>状态</th>
+      </tr>
+    </thead>
+    <tbody id="user-list">
+      <tr><td colspan="3" style="text-align:center;color:#94a3b8">加载中...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- 用户控制台弹窗 -->
+<div id="user-modal">
+  <div class="modal-box">
+    <h2 id="modal-title">管理用户</h2>
+    
+    <div class="action-group">
+      <h3>💰 橘子操作</h3>
+      <div class="btn-row" style="margin-bottom: 8px;">
+        <button class="btn-orange" onclick="modifyOrange(1000)">+1000</button>
+        <button class="btn-orange" onclick="modifyOrange(10000)">+1万</button>
+        <button class="btn-orange" onclick="modifyOrange(-1000)">-1000</button>
+      </div>
+      <button class="btn-orange" style="width:100%" onclick="modifyOrangeCustom()">自定义加减金额</button>
+    </div>
+
+    <div class="action-group">
+      <h3>🥩 发放任意食材</h3>
+      <div class="food-selector">
+        <select id="food-emoji">
+          <!-- 动态注入 20 多种食材 -->
+        </select>
+        <input id="food-count" type="number" value="10" min="1" title="发放数量">
+        <button onclick="giveFoodCustom()">发放</button>
+      </div>
+      <div style="font-size: 12px; color: #888; margin-top: 8px;">发放数量支持自定义，系统会自动存入该用户的食材库。</div>
+    </div>
+
+    <button class="btn-close" onclick="document.getElementById('user-modal').style.display='none'">关闭面板</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  var token = localStorage.getItem('token');
+  if (!token) location.href = '/';
+  var currentTargetUser = null;
+
+  // 全服食材图鉴（和后台保持一致）
+  var FOOD_LIST = [
+    { emoji: '🥚', name: '鸡蛋' }, { emoji: '🧅', name: '洋葱' }, { emoji: '🥬', name: '生菜' },
+    { emoji: '🥔', name: '土豆' }, { emoji: '🥒', name: '黄瓜' }, { emoji: '🌽', name: '玉米' },
+    { emoji: '🍗', name: '鸡腿' }, { emoji: '🍤', name: '虾滑' }, { emoji: '🥓', name: '培根' },
+    { emoji: '🍄', name: '金针菇' }, { emoji: '🥦', name: '西兰花' }, { emoji: '🍜', name: '方便面' },
+    { emoji: '🍪', name: '干脆面' }, { emoji: '🥤', name: '奶茶' }, { emoji: '🧋', name: '黑珍珠' },
+    { emoji: '🥩', name: '顶级牛肉' }, { emoji: '🦞', name: '龙虾' }, { emoji: '🐟', name: '三文鱼' },
+    { emoji: '🍫', name: '巧克力' }, { emoji: '🫚', name: '生姜(雷)' }, { emoji: '🌿', name: '香菜(雷)' }
+  ];
+
+  // 渲染食材下拉框
+  function initFoodSelect() {
+    var sel = document.getElementById('food-emoji');
+    sel.innerHTML = FOOD_LIST.map(f => `<option value="${f.emoji}">${f.emoji} ${f.name}</option>`).join('');
+  }
+
+  function loadData() {
+    fetch('/api/admin/dashboard', { headers: { 'Authorization': token } })
+      .then(r => r.json()).then(d => {
+        if (!d.ok) { alert(d.msg); location.href = '/'; return; }
+        
+        document.getElementById('stat-users').textContent = d.stats.userCount;
+        document.getElementById('stat-oranges').textContent = d.stats.totalOranges.toLocaleString();
+        document.getElementById('stat-msgs').textContent = d.stats.totalMsgs;
+        document.getElementById('stat-intel').textContent = d.stats.totalIntel;
+
+        var tbody = document.getElementById('user-list');
+        tbody.innerHTML = d.users.map(u => {
+          var badges = '';
+          if (u.isSuperAdmin) badges += '<span class="badge admin">超管</span>';
+          if (u.banned) badges += '<span class="badge banned">封禁</span>';
+          
+          return '<tr onclick="openUserModal(\'' + u.name + '\')">' +
+            '<td><b>' + u.displayName + '</b> (' + u.name + ') ' + badges + '</td>' +
+            '<td style="color:#fbbf24;font-weight:bold;">' + u.oranges.toFixed(2) + ' 🍊</td>' +
+            '<td>' + (u.banned ? '❌ 封禁' : '✅ 正常') + '</td>' +
+          '</tr>';
+        }).join('');
+      });
+  }
+
+  window.openUserModal = function(username) {
+    currentTargetUser = username;
+    document.getElementById('modal-title').textContent = '管理用户: ' + username;
+    document.getElementById('user-modal').style.display = 'flex';
+  };
+
+  window.modifyOrange = function(amount) {
+    if (!currentTargetUser) return;
+    fetch('/api/lobster/admin/add', {
+      method: 'POST',
+      headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: currentTargetUser, amount: amount })
+    }).then(r => r.json()).then(d => {
+      if (d.ok) { loadData(); } else alert(d.msg);
+    });
+  };
+
+  window.modifyOrangeCustom = function() {
+    var amount = prompt('输入要增加的橘子数量 (输入负数则是扣除):', '500');
+    if (!amount || isNaN(Number(amount))) return;
+    modifyOrange(Number(amount));
+  };
+
+  window.giveFoodCustom = function() {
+    if (!currentTargetUser) return;
+    var emoji = document.getElementById('food-emoji').value;
+    var count = Number(document.getElementById('food-count').value);
+    if (isNaN(count) || count <= 0) return alert('数量错误');
+
+    fetch('/api/admin/food', {
+      method: 'POST',
+      headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetName: currentTargetUser, emoji: emoji, amount: count })
+    }).then(r => r.json()).then(d => {
+      if (d.ok) { 
+        alert(`已成功给 ${currentTargetUser} 发放 ${count} 个 ${emoji}`); 
+      } else alert(d.msg);
+    });
+  };
+
+  initFoodSelect();
+  loadData();
+})();
+</script>
+</body>
+</html>

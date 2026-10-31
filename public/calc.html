@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🧮 橘语计算器</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #050505; color: #2ecc71; font-family: ui-monospace, monospace; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+  .calc-box { background: #111; border: 2px solid #2ecc71; border-radius: 16px; padding: 24px; width: 100%; max-width: 360px; box-shadow: 0 0 30px rgba(46,204,64,0.2); }
+  .header { display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 14px; }
+  .header a { color: #888; text-decoration: none; }
+  .screen { background: #000; border: 1px solid #333; border-radius: 8px; padding: 16px; margin-bottom: 16px; text-align: right; }
+  .screen .code { font-size: 12px; color: #888; min-height: 18px; margin-bottom: 8px; text-align: left; word-break: break-all;}
+  .screen .result { font-size: 32px; color: #fff; font-weight: bold; overflow: hidden; text-overflow: ellipsis; }
+  .keypad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  button { background: #222; color: #2ecc71; border: 1px solid #333; border-radius: 8px; padding: 16px; font-size: 20px; font-weight: bold; cursor: pointer; transition: 0.1s; font-family: inherit;}
+  button:active { background: #2ecc71; color: #000; }
+  .btn-op { color: #f39c12; }
+  .btn-eq { background: #2ecc71; color: #000; grid-column: span 2; }
+  .btn-clear { color: #e74c3c; }
+</style>
+</head>
+<body>
+<div class="calc-box">
+  <div class="header">
+    <span>OrangeScript Calc</span>
+    <a href="/">← 返回</a>
+  </div>
+  <div class="screen">
+    <div class="code" id="code-preview">// 橘语代码将在此显示</div>
+    <div class="result" id="result">0</div>
+  </div>
+  <div class="keypad">
+    <button class="btn-clear" onclick="__input('C')">C</button>
+    <button onclick="__input('/')">÷</button>
+    <button onclick="__input('*')">×</button>
+    <button class="btn-op" onclick="__input('-')">-</button>
+
+    <button onclick="__input('7')">7</button>
+    <button onclick="__input('8')">8</button>
+    <button onclick="__input('9')">9</button>
+    <button class="btn-op" onclick="__input('+')">+</button>
+
+    <button onclick="__input('4')">4</button>
+    <button onclick="__input('5')">5</button>
+    <button onclick="__input('6')">6</button>
+    <button class="btn-eq" onclick="__run()">=</button>
+
+    <button onclick="__input('1')">1</button>
+    <button onclick="__input('2')">2</button>
+    <button onclick="__input('3')">3</button>
+    <button onclick="__input('.')">.</button>
+    
+    <button onclick="__input('0')" style="grid-column: span 4;">0</button>
+  </div>
+</div>
+<script>
+let currentExpr = '';
+const preview = document.getElementById('code-preview');
+const resultEl = document.getElementById('result');
+
+function __input(val) {
+  if (val === 'C') {
+    currentExpr = '';
+    preview.innerText = '// 橘语代码将在此显示';
+    resultEl.innerText = '0';
+    return;
+  }
+  currentExpr += val;
+  // 动态生成橘语预览
+  preview.innerText = `橘子 结果 = ${currentExpr};\\n打印(结果);`;
+  resultEl.innerText = '...';
+}
+
+async function __run() {
+  if (!currentExpr) return;
+  resultEl.innerText = '计算中...';
+  
+  const code = `橘子 结果 = ${currentExpr};\\n打印(结果);`;
+  
+  try {
+    const res = await fetch('/api/orange/run', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ code: code })
+    });
+    const d = await res.json();
+    if (d.ok) {
+      const out = d.output.trim();
+      resultEl.innerText = out;
+      // 如果包含“错误”字样，说明算错了，禁止把错误文本塞进下一轮算式
+      if (out.includes('[') || out.includes('错误') || out.includes('invalid')) {
+        currentExpr = ''; 
+      } else {
+        currentExpr = out; // 正常数字允许连算
+      }
+    } else {
+      resultEl.innerText = '错误';
+      preview.innerText = d.msg;
+    }
+  } catch(e) {
+    resultEl.innerText = '网络错误';
+  }
+}
+</script>
+</body>
+</html>

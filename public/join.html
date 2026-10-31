@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>外网访问指南 - 橘域网</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { margin: 0; padding: 24px; font-family: -apple-system, "PingFang SC", sans-serif; background: #0a0a0a; color: #eee; display: flex; justify-content: center; min-height: 100vh; }
+  .box { background: #1a1a1a; padding: 24px; border-radius: 16px; max-width: 520px; width: 100%; border: 1px solid #333; box-shadow: 0 10px 30px rgba(0,0,0,0.5); height: fit-content; }
+  h1 { color: #00e5ff; font-size: 24px; margin-top: 0; margin-bottom: 8px; text-shadow: 0 0 10px rgba(0,229,255,0.3); }
+  .subtitle { color: #888; font-size: 14px; margin-bottom: 24px; }
+  
+  .step { margin-bottom: 24px; background: rgba(255,255,255,0.03); padding: 16px; border-radius: 12px; border: 1px solid #333; }
+  .step-title { font-size: 16px; font-weight: bold; color: #fff; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .step-title span { background: #00e5ff; color: #000; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 14px; }
+  
+  .btn { display: block; text-align: center; background: #222; color: #fff; text-decoration: none; padding: 14px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #444; font-size: 15px; transition: 0.2s; font-weight: bold; cursor: pointer; }
+  .btn:hover { background: #333; border-color: #00e5ff; }
+  .btn.primary { background: rgba(0,229,255,0.1); border-color: #00e5ff; color: #00e5ff; }
+  .btn.primary:hover { background: #00e5ff; color: #000; box-shadow: 0 0 15px rgba(0,229,255,0.4); }
+  .btn.warn { background: rgba(255,213,79,0.1); border-color: #ffd54f; color: #ffd54f; }
+  
+  .link-box { background: #000; padding: 14px; border-radius: 8px; font-family: monospace; font-size: 13px; word-break: break-all; border: 1px dashed #555; display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+  .link-box span { margin-right: 10px; }
+  .link-box button { background: #00e5ff; color: #000; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; flex-shrink: 0; }
+  
+  .hint { font-size: 13px; color: #aaa; margin-top: 8px; line-height: 1.6; }
+  .back { display: block; text-align: center; color: #888; text-decoration: none; margin-top: 20px; font-size: 14px; }
+  .back:hover { color: #fff; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>🌐 橘域网 外网接入</h1>
+  <div class="subtitle">使用 Tailscale 随时连回聊天室</div>
+  
+  <div class="step">
+    <div class="step-title"><span>1</span> 下载 Tailscale</div>
+    <a href="https://tailscale.com/download" target="_blank" class="btn primary">前往官网下载 (支持全平台)</a>
+    <div class="hint">苹果手机去 App Store 搜 "Tailscale"；安卓去应用商店或官网下 APK；电脑直接下对应版本。</div>
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span>2</span> 找老板要邀请链接</div>
+    <div class="hint" style="color:#ffd54f; font-weight:bold; margin-bottom:10px;">
+      ⚠️ 千万不要自己瞎注册账号！否则连不上！
+    </div>
+    <div class="hint" style="margin-top:0; margin-bottom:10px;">
+      请找老板（程序猿猴）要一个<b>专属邀请链接</b>。点开链接，用你的微信/Google/GitHub 账号登录，并等待老板在后台同意。
+    </div>
+    <button class="btn warn" onclick="alert('去微信找老板要邀请链接！')">去要链接</button>
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span>3</span> 访问橘域网</div>
+    <div class="hint" style="margin-top:0; margin-bottom:10px;">
+      确保手机或电脑右上角有 Tailscale 的图标，且处于<b>已连接</b>状态。然后在浏览器输入以下地址（推荐用域名）：
+    </div>
+    
+    <div class="link-box">
+      <span>https://jianmings-mac-mini.tail6418df.ts.net:8443</span>
+      <button onclick="navigator.clipboard.writeText('https://jianmings-mac-mini.tail6418df.ts.net:8443').then(()=>alert('域名已复制'))">复制</button>
+    </div>
+    
+    <div class="link-box">
+      <span>https://100.87.149.87:8443</span>
+      <button onclick="navigator.clipboard.writeText('https://100.87.149.87:8443').then(()=>alert('IP已复制'))">复制</button>
+    </div>
+    
+    <div class="hint" style="color:#ffd54f;">提示：如果浏览器提示“连接不是私密连接”，点“高级” -> “继续前往”即可。</div>
+  </div>
+  
+  <a href="/" class="back">← 返回聊天室</a>
+</div>
+</body>
+</html>

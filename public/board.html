@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>协同白板</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden;
+    font-family: system-ui, -apple-system, sans-serif; background: #f5f5f5;
+    user-select: none; -webkit-user-select: none; touch-action: none; }
+  #toolbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    background: #fff; border-bottom: 1px solid #ddd;
+    padding: 8px 12px; display: flex; flex-wrap: wrap;
+    gap: 8px; align-items: center;
+  }
+  #toolbar .colors { display: flex; gap: 4px; }
+  #toolbar .color {
+    width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+    border: 2px solid #fff; box-shadow: 0 0 0 1px #ccc;
+  }
+  #toolbar .color.active { box-shadow: 0 0 0 2px #2a6; }
+  #toolbar .sizes { display: flex; gap: 4px; }
+  #toolbar .size {
+    width: 28px; height: 28px; border-radius: 6px; cursor: pointer;
+    background: #f0f0f0; display: flex; align-items: center;
+    justify-content: center; border: 1px solid #ddd;
+  }
+  #toolbar .size.active { background: #2a6; color: #fff; }
+  #toolbar .size .dot { border-radius: 50%; background: currentColor; }
+  #toolbar button {
+    padding: 6px 12px; border: 1px solid #ddd; background: #f5f5f5;
+    border-radius: 6px; cursor: pointer; font-size: 13px;
+    color: #333; white-space: nowrap;
+  }
+  #toolbar button:hover { background: #e8e8e8; }
+  #toolbar button.active { background: #2a6; color: #fff; border-color: #2a6; }
+  #toolbar button.danger { color: #c0392b; border-color: #f0c0c0; }
+  #toolbar .sep { width: 1px; height: 24px; background: #ddd; }
+  #users-badge {
+    margin-left: auto; font-size: 12px; color: #888;
+    background: #f0f0f0; padding: 4px 10px; border-radius: 12px;
+  }
+  #canvas-wrap {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    overflow: auto; background: #fafafa;
+  }
+  #board {
+    display: block; background: #fff;
+    cursor: crosshair;
+    box-shadow: 0 0 20px rgba(0,0,0,0.1);
+  }
+  #loading {
+    position: fixed; inset: 0; background: rgba(255,255,255,0.95);
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; z-index: 100; font-size: 15px; color: #666;
+  }
+  #loading .spinner {
+    width: 32px; height: 32px; border: 3px solid #ddd;
+    border-top-color: #2a6; border-radius: 50%;
+    animation: spin 0.8s linear infinite; margin-bottom: 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #toast {
+    position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.75); color: #fff; padding: 10px 20px;
+    border-radius: 20px; font-size: 13px; z-index: 200;
+    opacity: 0; transition: opacity 0.3s; pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+  #vote-modal {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    z-index: 150; align-items: center; justify-content: center;
+  }
+  #vote-modal.open { display: flex; }
+  #vote-box {
+    background: #fff; padding: 24px; border-radius: 12px;
+    max-width: 320px; text-align: center;
+  }
+  #vote-box h3 { margin: 0 0 12px; font-size: 16px; }
+  #vote-box p { margin: 0 0 20px; color: #666; font-size: 14px; }
+  #vote-box button {
+    padding: 10px 24px; border: none; border-radius: 6px;
+    cursor: pointer; font-size: 14px; margin: 0 4px;
+  }
+  #vote-agree { background: #2a6; color: #fff; }
+  #vote-reject { background: #eee; color: #555; }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <div>正在加载白板...</div>
+</div>
+
+<div id="toolbar">
+  <div class="colors" id="colors"></div>
+  <div class="sep"></div>
+  <div class="sizes" id="sizes"></div>
+  <div class="sep"></div>
+  <button id="btn-eraser">橡皮</button>
+  <button id="btn-undo">↶ 撤销</button>
+  <button id="btn-redo">↷ 重做</button>
+  <div class="sep"></div>
+  <button id="btn-clear" class="danger">清空</button>
+  <div id="users-badge">在线：<span id="user-count">0</span></div>
+</div>
+
+<div id="canvas-wrap">
+  <canvas id="board"></canvas>
+</div>
+
+<div id="toast"></div>
+
+<div id="vote-modal">
+  <div id="vote-box">
+    <h3>清空白板请求</h3>
+    <p><b id="vote-initiator">某人</b> 请求清空整个白板。<br>所有人都同意才会执行。</p>
+    <div>
+      <button id="vote-reject">拒绝</button>
+      <button id="vote-agree">同意</button>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(function() {
+  var token = localStorage.getItem('token');
+  if (!token) {
+    document.getElementById('loading').innerHTML = '<div style="color:#c0392b">未登录，请先在聊天室登录</div>';
+    return;
+  }
+
+  var socket = io({ auth: { token } });
+  var canvas = document.getElementById('board');
+  var ctx = canvas.getContext('2d');
+  var wrap = document.getElementById('canvas-wrap');
+
+  var PALETTE = ['#000000', '#e74c3c', '#f39c12', '#f1c40f', '#2ecc71', '#3498db', '#9b59b6', '#ffffff'];
+  var SIZES = [2, 5, 12];
+  var currentColor = PALETTE[0];
+  var currentSize = SIZES[1];
+  var isEraser = false;
+
+  var strokes = [];  // 所有笔画（含自己画的）
+  var drawing = false;
+  var currentStroke = null;
+  var myId = 'me-' + Math.random().toString(36).slice(2, 8);
+
+  // ============ 画布尺寸自适应 ============
+  function resizeCanvas() {
+    var w = wrap.clientWidth;
+    var h = wrap.clientHeight;
+    // 至少 1920x1080，不够就撑开
+    var cw = Math.max(w, 1920);
+    var ch = Math.max(h, 1080);
+    if (canvas.width !== cw || canvas.height !== ch) {
+      canvas.width = cw;
+      canvas.height = ch;
+      canvas.style.width = cw + 'px';
+      canvas.style.height = ch + 'px';
+      redrawAll();
+    }
+  }
+
+  // ============ 绘制 ============
+  function drawStroke(s) {
+    if (!s.points || s.points.length < 1) return;
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = s.size;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (s.points.length === 1) {
+      // 单点：画个圆点
+      ctx.beginPath();
+      ctx.arc(s.points[0].x, s.points[0].y, s.size / 2, 0, Math.PI * 2);
+      ctx.fillStyle = s.color;
+      ctx.fill();
+      return;
+    }
+    ctx.beginPath();
+    ctx.moveTo(s.points[0].x, s.points[0].y);
+    for (var i = 1; i < s.points.length; i++) {
+      ctx.lineTo(s.points[i].x, s.points[i].y);
+    }
+    ctx.stroke();
+  }
+
+  function redrawAll() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (var i = 0; i < strokes.length; i++) drawStroke(strokes[i]);
+  }
+
+  // ============ 用户操作 ============
+  function getPos(e) {
+    var rect = canvas.getBoundingClientRect();
+    return {
+      x: Math.round(e.clientX - rect.left),
+      y: Math.round(e.clientY - rect.top),
+    };
+  }
+
+  function startStroke(e) {
+    if (drawing) return;
+    drawing = true;
+    var pos = getPos(e);
+    currentStroke = {
+      id: myId + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      color: isEraser ? '#ffffff' : currentColor,
+      size: isEraser ? currentSize * 3 : currentSize,
+      points: [pos],
+      userId: null,
+      user: null,
+    };
+    strokes.push(currentStroke);
+    drawStroke(currentStroke);
+  }
+
+  function moveStroke(e) {
+    if (!drawing || !currentStroke) return;
+    var pos = getPos(e);
+    currentStroke.points.push(pos);
+    // 只画最后一小段（性能）
+    var pts = currentStroke.points;
+    if (pts.length >= 2) {
+      ctx.strokeStyle = currentStroke.color;
+      ctx.lineWidth = currentStroke.size;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(pts[pts.length - 2].x, pts[pts.length - 2].y);
+      ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+      ctx.stroke();
+    }
+  }
+
+  function endStroke() {
+    if (!drawing) return;
+    drawing = false;
+    if (currentStroke) {
+      socket.emit('board_draw', currentStroke);
+      currentStroke = null;
+    }
+  }
+
+  canvas.addEventListener('pointerdown', function(e) {
+    e.preventDefault();
+    canvas.setPointerCapture(e.pointerId);
+    startStroke(e);
+  });
+  canvas.addEventListener('pointermove', function(e) {
+    if (!drawing) return;
+    e.preventDefault();
+    moveStroke(e);
+  });
+  canvas.addEventListener('pointerup', function(e) {
+    e.preventDefault();
+    endStroke();
+  });
+  canvas.addEventListener('pointercancel', endStroke);
+  canvas.addEventListener('pointerleave', endStroke);
+
+  // ============ 工具栏 ============
+  var colorsEl = document.getElementById('colors');
+  PALETTE.forEach(function(c) {
+    var d = document.createElement('div');
+    d.className = 'color' + (c === currentColor ? ' active' : '');
+    d.style.background = c;
+    if (c === '#ffffff') {
+      d.style.boxShadow = '0 0 0 1px #ccc, inset 0 0 0 1px #eee';
+    }
+    d.addEventListener('click', function() {
+      currentColor = c;
+      isEraser = false;
+      document.getElementById('btn-eraser').classList.remove('active');
+      colorsEl.querySelectorAll('.color').forEach(function(x) { x.classList.remove('active'); });
+      d.classList.add('active');
+    });
+    colorsEl.appendChild(d);
+  });
+
+  var sizesEl = document.getElementById('sizes');
+  SIZES.forEach(function(sz) {
+    var d = document.createElement('div');
+    d.className = 'size' + (sz === currentSize ? ' active' : '');
+    var dot = document.createElement('div');
+    dot.className = 'dot';
+    dot.style.width = Math.min(sz + 2, 16) + 'px';
+    dot.style.height = Math.min(sz + 2, 16) + 'px';
+    d.appendChild(dot);
+    d.addEventListener('click', function() {
+      currentSize = sz;
+      sizesEl.querySelectorAll('.size').forEach(function(x) { x.classList.remove('active'); });
+      d.classList.add('active');
+    });
+    sizesEl.appendChild(d);
+  });
+
+  document.getElementById('btn-eraser').addEventListener('click', function() {
+    isEraser = !isEraser;
+    this.classList.toggle('active', isEraser);
+  });
+
+  document.getElementById('btn-undo').addEventListener('click', function() {
+    socket.emit('board_undo');
+  });
+  document.getElementById('btn-redo').addEventListener('click', function() {
+    socket.emit('board_redo');
+  });
+  document.getElementById('btn-clear').addEventListener('click', function() {
+    if (!confirm('清空白板？需要所有在线的人同意。')) return;
+    socket.emit('board_clear_request');
+  });
+
+  // ============ socket 事件 ============
+  socket.on('connect', function() {
+    socket.emit('board_join');
+  });
+
+  socket.on('board_history', function(data) {
+    strokes = data.strokes || [];
+    redrawAll();
+    document.getElementById('loading').style.display = 'none';
+    toast('已加载 ' + strokes.length + ' 笔');
+  });
+
+  socket.on('board_draw', function(s) {
+    strokes.push(s);
+    drawStroke(s);
+  });
+
+  socket.on('board_remove', function(data) {
+    // 找到并删掉
+    for (var i = strokes.length - 1; i >= 0; i--) {
+      if (strokes[i].id === data.id) { strokes.splice(i, 1); break; }
+    }
+    redrawAll();
+  });
+
+  socket.on('board_clear', function() {
+    strokes = [];
+    redrawAll();
+    toast('白板已清空');
+  });
+
+  socket.on('board_users', function(users) {
+    document.getElementById('user-count').textContent = users.length;
+  });
+
+  socket.on('board_toast', function(d) {
+    toast(d.msg);
+  });
+
+  // 清空投票弹窗
+  var voteModal = document.getElementById('vote-modal');
+  socket.on('board_clear_vote', function(d) {
+    document.getElementById('vote-initiator').textContent = d.initiator;
+    voteModal.classList.add('open');
+    voteModal.dataset.voteId = d.voteId;
+  });
+  document.getElementById('vote-agree').addEventListener('click', function() {
+    socket.emit('board_clear_vote', { voteId: voteModal.dataset.voteId, agree: true });
+    voteModal.classList.remove('open');
+  });
+  document.getElementById('vote-reject').addEventListener('click', function() {
+    socket.emit('board_clear_vote', { voteId: voteModal.dataset.voteId, agree: false });
+    voteModal.classList.remove('open');
+  });
+
+  // ============ Toast ============
+  var toastEl = document.getElementById('toast');
+  var toastTimer = null;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function() { toastEl.classList.remove('show'); }, 2500);
+  }
+
+  // ============ 初始化 ============
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  // 离开页面时告知服务端
+  window.addEventListener('beforeunload', function() {
+    socket.emit('board_leave');
+  });
+})();
+</script>
+</body>
+</html>

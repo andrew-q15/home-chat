@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>✍️ 创作空间</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #f8f9fa; font-family: -apple-system, sans-serif; display: flex; height: 100vh; overflow: hidden; }
+  .sidebar { width: 260px; background: #fff; border-right: 1px solid #eee; display: flex; flex-direction: column; }
+  .sidebar-header { padding: 16px; border-bottom: 1px solid #eee; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+  .list { flex: 1; overflow-y: auto; padding: 10px; }
+  .list-item { padding: 12px; border-radius: 8px; cursor: pointer; margin-bottom: 8px; border: 1px solid transparent; position: relative; }
+  .list-item:hover { background: #f0f0f0; }
+  .list-item.active { background: #e3f2fd; border-color: #90caf9; }
+  .list-item .title { font-size: 14px; font-weight: bold; padding-right: 50px;}
+  .list-item .meta { font-size: 11px; color: #999; margin-top: 4px;}
+  .list-item .btn-del { position: absolute; right: 10px; top: 12px; color: #e74c3c; font-size: 13px; display: block; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
+  .btn-new { margin: 10px; padding: 10px; background: #2ecc71; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+  .editor-area { flex: 1; display: flex; flex-direction: column; background: #fff; }
+  .toolbar { padding: 12px 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+  .title-input { border: none; outline: none; font-size: 20px; font-weight: bold; flex: 1; }
+  .action-group { display: flex; gap: 10px; align-items: center; }
+  .type-select { padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; }
+  .btn-save { padding: 8px 16px; background: #f1f1f1; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; }
+  .btn-publish { padding: 8px 20px; background: #ff2442; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+  .editor { flex: 1; padding: 20px; outline: none; font-size: 16px; line-height: 1.8; overflow-y: auto; }
+</style>
+</head>
+<body>
+<div class="sidebar">
+  <div class="sidebar-header"><span>✍️ 我的草稿</span><a href="/novels.html" style="color:#ff2442;font-weight:bold;text-decoration:none;">📖 小说中心</a></div>
+  <button class="btn-new" onclick="__newDoc()">+ 新建作品</button>
+  <div class="list" id="list"></div>
+</div>
+<div class="editor-area" id="editor-area" style="display:none;">
+  <div class="toolbar">
+    <input type="text" class="title-input" id="doc-title" placeholder="输入标题..." oninput="__onInput()">
+    <div class="action-group">
+      <select class="type-select" id="doc-type" onchange="__onInput()">
+        <option value="novel">📖 小说</option>
+        <option value="note">📝 杂记</option>
+      </select>
+      <button class="btn-save" onclick="__autoSave(true)">保存草稿</button>
+      <button class="btn-publish" id="btn-publish" onclick="__publish()">公开发布</button>
+    </div>
+  </div>
+  <div class="editor" id="doc-editor" contenteditable="true" placeholder="开始创作..." oninput="__onInput()"></div>
+</div>
+<script>
+let myToken = localStorage.getItem('token');
+let currentDocId = null;
+let docs = [];
+let saveTimer = null;
+function loadDocs() { fetch('/api/writings', { headers: { 'Authorization': myToken } }).then(r=>r.json()).then(d => { if (d.ok) { docs = d.mine; renderList(); } }); }
+loadDocs();
+function getTypeName(t) { return t === 'novel' ? '📖 小说' : '📝 杂记'; }
+function renderList() {
+  const list = document.getElementById('list');
+  if (docs.length === 0) { list.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">暂无草稿</div>'; return; }
+  list.innerHTML = docs.map(d => `<div class="list-item ${d.id === currentDocId ? 'active' : ''}" onclick="__openDoc('${d.id}')"><div class="title">${d.title || '无标题'}</div><div class="meta">${d.isPublished ? '🔴 已发布' : getTypeName(d.type)} · ${d.wordCount || 0} 字</div><div class="btn-del" onclick="event.stopPropagation(); __delDoc('${d.id}')">删除</div></div>`).join('');
+}
+window.__newDoc = function() { const id = 'temp-' + Date.now(); const newDoc = { id: id, title: '', content: '', type: 'novel', wordCount: 0 }; docs.unshift(newDoc); __openDoc(id, newDoc); };
+window.__openDoc = function(id, localDoc) {
+  currentDocId = id; const doc = localDoc || docs.find(d => d.id === id); if (!doc) return;
+  document.getElementById('editor-area').style.display = 'flex';
+  document.getElementById('doc-title').value = doc.title || '';
+  document.getElementById('doc-editor').textContent = doc.content || '';
+  document.getElementById('doc-type').value = doc.type || 'novel';
+  document.getElementById('btn-publish').disabled = doc.isPublished;
+  document.getElementById('btn-publish').textContent = doc.isPublished ? '已发布' : '公开发布';
+  renderList();
+};
+window.__delDoc = function(id) {
+  if (!confirm('彻底删除？不可恢复！')) return;
+  if (id.startsWith('temp-')) { docs = docs.filter(x => x.id !== id); renderList(); document.getElementById('editor-area').style.display = 'none'; return; }
+  fetch('/api/writings/' + id, { method: 'DELETE', headers: { 'Authorization': myToken } }).then(r=>r.json()).then(d => { if (d.ok) { docs = docs.filter(x => x.id !== id); if (currentDocId === id) document.getElementById('editor-area').style.display = 'none'; renderList(); } });
+};
+window.__onInput = function() { if (saveTimer) clearTimeout(saveTimer); saveTimer = setTimeout(() => { __autoSave(); }, 1000); };
+window.__autoSave = function(isManual) {
+  const title = document.getElementById('doc-title').value; const content = document.getElementById('doc-editor').textContent; const type = document.getElementById('doc-type').value;
+  if (!title && !content) return;
+  fetch('/api/writings/save', { method: 'POST', headers: { 'Authorization': myToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ id: currentDocId, title, content, type }) }).then(r=>r.json()).then(d => {
+    if (d.ok) {
+      if (currentDocId.startsWith('temp-')) { const doc = docs.find(x => x.id === currentDocId); currentDocId = d.id; if (doc) doc.id = d.id; }
+      const doc = docs.find(x => x.id === currentDocId); if (doc) { doc.title = title; doc.content = content; doc.type = type; doc.wordCount = content.length; }
+      renderList();
+    }
+  });
+};
+window.__publish = function() {
+  __autoSave(); setTimeout(() => {
+    fetch('/api/writings/publish', { method: 'POST', headers: { 'Authorization': myToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ id: currentDocId }) }).then(r=>r.json()).then(d => { if (d.ok) { alert('🎉 发布成功！'); location.reload(); } else alert(d.msg); });
+  }, 500);
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🕵️ English Intel Agency</title>
+<style id="theme-style">
+  /* 默认：赛博科技风 (赛博朋克绿) */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #050505; color: #fff; font-family: 'Courier New', Courier, monospace; min-height: 100vh; }
+  .header { padding: 20px; background: rgba(0, 50, 0, 0.2); border-bottom: 2px solid #0f0; display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { font-size: 22px; color: #0f0; text-shadow: 0 0 10px #0f0; letter-spacing: 2px; }
+  .header a { color: #0f0; text-decoration: none; border: 1px solid #0f0; padding: 5px 10px; font-size: 12px; }
+  .container { max-width: 800px; margin: 20px auto; padding: 0 16px; }
+  .intel-card { background: rgba(0,0,0,0.8); border: 1px solid #0f0; border-left: 4px solid #0f0; padding: 16px; margin-bottom: 16px; box-shadow: 0 0 10px rgba(0,255,0,0.1); transition: 0.3s; }
+  .intel-card:hover { box-shadow: 0 0 20px rgba(0,255,0,0.3); }
+  .blink { animation: blinker 1s linear infinite; }
+  @keyframes blinker { 50% { opacity: 0; } }
+  .intel-meta { display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-bottom: 8px; }
+  .intel-meta .author { color: #f0f; text-shadow: 0 0 5px #f0f; }
+  .intel-title { font-size: 18px; color: #fff; margin-bottom: 8px; font-weight: bold; }
+  .intel-text { font-size: 14px; color: #aaa; line-height: 1.6; margin-bottom: 16px; }
+  .btn-read { background: transparent; border: 1px solid #0f0; color: #0f0; padding: 4px 8px; font-size: 12px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div class="header" id="header">
+  <h1 id="title">[ ENGLISH_INTEL_AGENCY ]</h1>
+  <a href="/" id="back-btn">RETURN_TO_BASE</a>
+</div>
+
+<div class="container">
+  <!-- 英文情报提交 (长辈模式会自动隐藏) -->
+  <div id="submit-panel" style="background: rgba(0, 20, 0, 0.6); border: 1px solid #0f0; padding: 16px; margin-bottom: 30px; box-shadow: 0 0 15px rgba(0, 255, 0, 0.1);">
+    <input type="text" id="en-title" placeholder="INTEL TITLE (English only)" style="width: 100%; background: #000; border: 1px solid #333; color: #0f0; padding: 12px; margin-bottom: 12px; font-family: inherit; outline: none;">
+    <textarea id="en-text" rows="3" placeholder="Briefing details..." style="width: 100%; background: #000; border: 1px solid #333; color: #0f0; padding: 12px; margin-bottom: 12px; font-family: inherit; outline: none;"></textarea>
+    <button onclick="__submitEnIntel()" style="width: 100%; padding: 12px; background: #0f0; color: #000; border: none; font-weight: bold; font-size: 16px; cursor: pointer; text-transform: uppercase;">UPLOAD INTEL</button>
+  </div>
+
+  <div class="intel-list" id="intel-list"></div>
+</div>
+
+<script>
+let myToken = localStorage.getItem('token');
+let intelData = [];
+let isElder = false;
+
+// 1. 先检查自己是不是长辈
+async function checkRole() {
+  try {
+    const res = await fetch('/api/verify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: myToken })
+    });
+    const d = await res.json();
+    
+    if (d.ok) {
+      isElder = !!d.isElderMode;
+      if (isElder) {
+        applyElderTheme();
+        if (d.lockElderMode) {
+          // 如果老板锁定了爷爷模式，把返回按钮直接拔掉
+          const backBtn = document.getElementById('back-btn');
+          if (backBtn) backBtn.style.display = 'none';
+        }
+      }
+      loadIntel();
+    } else {
+      window.location.href = '/';
+    }
+  } catch {
+    window.location.href = '/';
+  }
+}
+
+// 2. 如果是长辈，替换成“大字关怀版”的主题和文案
+function applyElderTheme() {
+  document.getElementById('title').innerText = '🌍 国际新闻日报';
+  const panel = document.getElementById('submit-panel');
+  if (panel) panel.style.display = 'none'; // 长辈不需要发情报，隐藏掉
+  document.getElementById('back-btn').innerText = '返回聊天室';
+  
+  const css = `
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #f4f4f4; color: #333; font-family: -apple-system, sans-serif; min-height: 100vh; }
+    .header { padding: 24px; background: #2c3e50; color: #fff; display: flex; justify-content: space-between; align-items: center; }
+    .header h1 { font-size: 28px; font-weight: bold; }
+    .header a { color: #fff; text-decoration: none; border: 2px solid #fff; padding: 8px 16px; font-size: 18px; border-radius: 6px; }
+    .container { max-width: 900px; margin: 20px auto; padding: 0 20px; }
+    .intel-card { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+    .intel-meta { font-size: 16px; color: #666; margin-bottom: 16px; font-weight: bold; }
+    .intel-meta .author { color: #2980b9; }
+    .intel-title { font-size: 32px; color: #111; margin-bottom: 16px; font-weight: bold; line-height: 1.4; }
+    .intel-text { font-size: 24px; color: #444; line-height: 1.6; margin-bottom: 20px; }
+    .btn-read { background: #27ae60; border: none; color: #fff; padding: 16px 24px; font-size: 22px; font-weight: bold; border-radius: 8px; width: 100%; display: block; text-align: center; }
+    .btn-read:active { background: #219150; }
+  `;
+  document.getElementById('theme-style').innerHTML = css;
+}
+
+// 3. 加载新闻
+function loadIntel() {
+  fetch('/api/intel/en').then(r=>r.json()).then(d => {
+    if (d.ok) {
+      intelData = d.intel;
+      renderList();
+    }
+  });
+}
+
+// 4. 渲染列表
+function renderList() {
+  const list = document.getElementById('intel-list');
+  if (intelData.length === 0) {
+    list.innerHTML = '<div style="text-align:center;color:#666;padding:20px;font-size:18px;">NO INTEL FOUND.</div>';
+    return;
+  }
+  list.innerHTML = intelData.map(item => {
+    const timeStr = new Date(item.time).toLocaleString(isElder ? 'zh-CN' : 'en-US');
+    return `
+      <div class="intel-card">
+        <div class="intel-meta">
+          <span class="author">${isElder ? '来源' : 'AGENT'}: ${item.author}</span>
+          <span>${isElder ? '时间' : 'TIME'}: ${timeStr}</span>
+        </div>
+        <div class="intel-title">${item.title}</div>
+        <div class="intel-text">${item.text}</div>
+        <button class="btn-read" onclick="__readText('${item.id}')">${isElder ? '🔊 点击朗读新闻' : '🔊 LISTEN'}</button>
+      </div>
+    `;
+  }).join('');
+}
+
+// 5. 朗读功能
+function __readText(id) {
+  const item = intelData.find(x => x.id === id);
+  if (!item) return;
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel(); // 停止之前的朗读
+    const utterance = new SpeechSynthesisUtterance(item.title + '. ' + item.text);
+    utterance.lang = 'en-US';
+    utterance.rate = isElder ? 0.9 : 1.0; // 长辈版语速稍微放慢
+    window.speechSynthesis.speak(utterance);
+  } else {
+    alert('当前浏览器不支持语音朗读');
+  }
+}
+
+checkRole();
+</script>
+</body>
+</html>

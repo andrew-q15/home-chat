@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🛒 跳蚤市场</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; font-family: system-ui, sans-serif; min-height: 100vh;
+    background: linear-gradient(160deg, #134e5e, #2a8a6e);
+    color: #fff; padding: 24px 16px 60px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  .sub { color: #b8e6d9; font-size: 13px; margin-bottom: 14px; }
+  .balance { font-size: 14px; margin-bottom: 18px; }
+  .balance b { color: #ffd54f; font-size: 18px; }
+  .card {
+    background: rgba(0,0,0,0.35); border-radius: 14px;
+    padding: 18px 16px; margin-bottom: 16px;
+  }
+  .card h2 { margin: 0 0 12px; font-size: 16px; }
+  input, textarea {
+    width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3);
+    color: #fff; font-size: 14px; outline: none; box-sizing: border-box;
+  }
+  textarea { height: 70px; resize: vertical; }
+  input:focus, textarea:focus { border-color: #ffd54f; }
+  button {
+    padding: 10px 20px; border: none; border-radius: 8px;
+    background: #ffd54f; color: #134e5e; font-size: 14px;
+    font-weight: 600; cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.ghost { background: rgba(255,255,255,0.15); color: #fff; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+  .item {
+    background: rgba(0,0,0,0.35); border-radius: 12px; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .item img { width: 100%; height: 140px; object-fit: cover; display: block; }
+  .item .noimg {
+    height: 140px; display: flex; align-items: center; justify-content: center;
+    font-size: 40px; background: rgba(255,255,255,0.06);
+  }
+  .item .info { padding: 10px 12px; flex: 1; display: flex; flex-direction: column; }
+  .item .t { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .item .d { font-size: 12px; color: #b8e6d9; flex: 1; margin-bottom: 8px;
+    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .item .p { color: #ffd54f; font-weight: 700; font-size: 16px; }
+  .item .s { font-size: 11px; color: #9fcfc2; margin-top: 2px; }
+  .item .buy { margin-top: 10px; }
+  .item .sold-badge {
+    margin-top: 10px; font-size: 12px; color: #9fcfc2;
+    background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px; text-align: center;
+  }
+  #status { min-height: 20px; font-size: 13px; color: #ffd54f; margin: 8px 0; }
+  .back { text-align: center; margin-top: 20px; }
+  .back a { color: #ffd54f; text-decoration: none; font-size: 14px; }
+  .dm-link { color: #ffd54f; cursor: pointer; text-decoration: underline; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🛒 跳蚤市场</h1>
+  <div class="sub">用橘子（🍊）买卖现实中的物品 · 成交后自动建立买卖双方私聊 · 参考汇率：1000 🍊 ≈ 1 元</div>
+  <div class="balance">我的余额：<b id="bal">--</b> 🍊</div>
+  <div id="status"></div>
+
+  <div class="card">
+    <h2>📦 我要卖</h2>
+    <input id="f-title" placeholder="物品名称（最多 30 字）" maxlength="30">
+    <textarea id="f-desc" placeholder="描述：成色、型号、见面地点……（最多 300 字）" maxlength="300"></textarea>
+    <input id="f-price" type="number" min="0" placeholder="价格（🍊）">
+    <input id="f-image" type="file" accept="image/*" style="display:none">
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="ghost" id="img-btn">📷 加张照片（可选）</button>
+      <span class="hint" id="img-hint" style="color:#b8e6d9;font-size:12px;align-self:center"></span>
+    </div>
+    <button id="pub-btn">上架</button>
+  </div>
+
+  <div class="card">
+    <h2>🛍 在售 / 已售</h2>
+    <div class="grid" id="list"></div>
+  </div>
+
+  <div class="card">
+    <h2>💖 给开发者打赏（研究经费）</h2>
+    <div style="font-size:13px;color:#b8e6d9;margin-bottom:12px">如果觉得这个聊天室、白板、龙虾、市场做得不错，请开发者喝杯奶茶吧！<br>参考汇率：1000 🍊 ≈ 1 元</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <button data-tip="1000">🍊 1000 ≈ 1元</button>
+      <button data-tip="5000">🍊 5000 ≈ 5元</button>
+      <button data-tip="10000">🍊 1万 ≈ 10元</button>
+      <button data-tip="50000">🍊 5万 ≈ 50元</button>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input id="tip-custom" type="number" min="1" placeholder="自定义金额" style="width:140px;margin-bottom:0">
+      <button class="ghost" id="tip-btn">打赏</button>
+    </div>
+    <div id="tip-info" style="font-size:12px;color:#9fcfc2;margin-top:10px"></div>
+  </div>
+
+  <div class="back"><a href="/">← 返回聊天室</a></div>
+</div>
+
+<script>
+(function() {
+  var token = localStorage.getItem('token');
+  var statusEl = document.getElementById('status');
+  var listEl = document.getElementById('list');
+  var items = [];
+  var myName = null;
+  var pickedImage = null;
+
+  function setStatus(t) { statusEl.textContent = t || ''; }
+
+  var authDead = false;
+  function showLoginNeeded(reason) {
+    authDead = true;
+    statusEl.innerHTML = '⚠️ ' + reason + '，请回 <a href="/" style="color:#ffd54f">聊天室</a> 重新登录后再来（注意：要用和聊天室完全相同的网址打开本页）';
+  }
+
+  function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  async function load() {
+    if (authDead) return;
+    if (!token) { showLoginNeeded('未登录'); return; }
+    try {
+      // 先确认身份（用于区分自己的商品）
+      var v = await fetch('/api/verify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: token }),
+      });
+      var vd = await v.json();
+      if (!vd.ok) {
+        localStorage.removeItem('token');
+        token = null;
+        showLoginNeeded('登录已失效（服务器重启过或换了登录地址）');
+        return;
+      }
+      myName = vd.username;
+      var res = await fetch('/api/market', { headers: { 'Authorization': token } });
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+        token = null;
+        showLoginNeeded('登录已失效');
+        return;
+      }
+      var data = await res.json();
+      if (!data.ok) { setStatus(data.msg || '加载失败'); return; }
+      items = data.listings || [];
+      document.getElementById('bal').textContent = data.myBalance;
+
+      render();
+    } catch (e) { setStatus('网络错误'); }
+  }
+
+  function render() {
+    listEl.innerHTML = '';
+    if (!items.length) {
+      listEl.innerHTML = '<div style="color:#b8e6d9;font-size:13px">还没人上架东西，来当第一个卖家吧！</div>';
+      return;
+    }
+    items.forEach(function(it) {
+      var div = document.createElement('div');
+      div.className = 'item';
+      var imgHtml = it.image
+        ? '<img src="' + esc(it.image) + '">'
+        : '<div class="noimg">📦</div>';
+      var action;
+      if (it.sold) {
+        action = '<div class="sold-badge">✅ 已售出' + (it.soldTo ? '给 ' + esc(it.soldTo) : '') + '</div>';
+      } else if (it.seller === myName) {
+        action = '<button class="ghost" style="width:100%" data-del="' + esc(it.id) + '">下架</button>';
+      } else {
+        action = '<button style="width:100%" data-buy="' + esc(it.id) + '">🍊 ' + it.price + ' 购买</button>';
+      }
+      div.innerHTML = imgHtml +
+        '<div class="info"><div class="t">' + esc(it.title) + '</div>' +
+        '<div class="d">' + esc(it.desc || '') + '</div>' +
+        '<div class="p">🍊 ' + it.price + '</div>' +
+        '<div class="s">卖家：' + esc(it.sellerName) + '</div>' +
+        '<div class="buy">' + action + '</div></div>';
+      listEl.appendChild(div);
+    });
+    listEl.querySelectorAll('button[data-buy]').forEach(function(b) {
+      b.addEventListener('click', function() { buy(b.dataset.buy); });
+    });
+    listEl.querySelectorAll('button[data-del]').forEach(function(b) {
+      b.addEventListener('click', function() { del(b.dataset.del); });
+    });
+  }
+
+  async function buy(id) {
+    var it = items.find(function(x) { return x.id === id; });
+    if (!it) return;
+    if (!confirm('确定用 ' + it.price + ' 🍊 购买「' + it.title + '」？\n付款后不可退，请线下当面交易。')) return;
+    try {
+      var res = await fetch('/api/market/' + id + '/buy', {
+        method: 'POST', headers: { 'Authorization': token },
+      });
+      var data = await res.json();
+      if (!data.ok) {
+        setStatus(data.msg || '购买失败');
+        alert('购买失败：' + (data.msg || '未知原因'));
+        return;
+      }
+      setStatus('🎉 购买成功！已和卖家 ' + data.sellerName + ' 建立私聊');
+      document.getElementById('bal').textContent = data.oranges;
+      // 提示去聊天室看私聊
+      setTimeout(function() {
+        if (confirm('已建立与卖家的私聊，现在回聊天室查看吗？')) location.href = '/';
+      }, 500);
+      load();
+    } catch (e) { setStatus('网络错误'); }
+  }
+
+  async function del(id) {
+    if (!confirm('确定下架？')) return;
+    try {
+      var res = await fetch('/api/market/' + id, { method: 'DELETE', headers: { 'Authorization': token } });
+      var data = await res.json();
+      if (!data.ok) { setStatus(data.msg || '失败'); return; }
+      load();
+    } catch (e) { setStatus('网络错误'); }
+  }
+
+  document.getElementById('img-btn').addEventListener('click', function() {
+    document.getElementById('f-image').click();
+  });
+  document.getElementById('f-image').addEventListener('change', async function() {
+    var f = this.files[0];
+    if (!f) return;
+    this.value = '';
+    var fd = new FormData();
+    fd.append('file', f);
+    try {
+      var res = await fetch('/api/upload', {
+        method: 'POST', headers: { 'Authorization': token }, body: fd,
+      });
+      var data = await res.json();
+      if (data.ok) { pickedImage = data.url; document.getElementById('img-hint').textContent = '✅ 图片已就绪'; }
+      else setStatus('图片上传失败：' + (data.msg || ''));
+    } catch (e) { setStatus('图片上传出错'); }
+  });
+
+  document.getElementById('pub-btn').addEventListener('click', async function() {
+    var title = document.getElementById('f-title').value.trim();
+    var desc = document.getElementById('f-desc').value.trim();
+    var price = Number(document.getElementById('f-price').value);
+    if (!title) { setStatus('物品名称不能为空'); return; }
+    if (isNaN(price) || price < 0) { setStatus('价格无效'); return; }
+    try {
+      var res = await fetch('/api/market', {
+        method: 'POST',
+        headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title, desc: desc, price: price, image: pickedImage }),
+      });
+      var data = await res.json();
+      if (!data.ok) { setStatus(data.msg || '上架失败'); return; }
+      setStatus('✅ 上架成功！');
+      document.getElementById('f-title').value = '';
+      document.getElementById('f-desc').value = '';
+      document.getElementById('f-price').value = '';
+      pickedImage = null;
+      document.getElementById('img-hint').textContent = '';
+      load();
+    } catch (e) { setStatus('网络错误'); }
+  });
+
+  async function loadTipInfo() {
+    if (authDead || !token) return;
+    try {
+      var res = await fetch('/api/market/tip-info', { headers: { 'Authorization': token } });
+      var data = await res.json();
+      var box = document.getElementById('tip-info');
+      if (!data.ok || !data.available) { box.textContent = ''; return; }
+      var html = '开发者：' + esc(data.developer) + ' · 累计收到 ' + data.total + ' 🍊';
+      if (data.recent && data.recent.length) {
+        html += '<br>最近的鼓励：' + data.recent.slice(0, 5).map(function(t) {
+          return esc(t.from) + '（' + t.amount + ' 🍊）';
+        }).join('、');
+      }
+      box.innerHTML = html;
+    } catch (e) {}
+  }
+
+  async function tip(amount) {
+    if (authDead || !token) { showLoginNeeded(token ? '登录已失效' : '未登录'); return; }
+    if (!amount || amount <= 0) { setStatus('金额无效'); return; }
+    if (!confirm('确定打赏 ' + amount + ' 🍊 给开发者？')) return;
+    try {
+      var res = await fetch('/api/market/tip', {
+        method: 'POST',
+        headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: amount }),
+      });
+      var data = await res.json();
+      if (!data.ok) { setStatus(data.msg || '打赏失败'); return; }
+      setStatus('💖 感谢你的支持！开发者收到了 ' + amount + ' 🍊');
+      document.getElementById('bal').textContent = data.oranges;
+      loadTipInfo();
+    } catch (e) { setStatus('网络错误'); }
+  }
+
+  document.querySelectorAll('button[data-tip]').forEach(function(b) {
+    b.addEventListener('click', function() { tip(Number(b.dataset.tip)); });
+  });
+  document.getElementById('tip-btn').addEventListener('click', function() {
+    tip(Number(document.getElementById('tip-custom').value));
+  });
+
+  if (!token) showLoginNeeded('未登录');
+  load();
+  loadTipInfo();
+  setInterval(load, 30000); // 每 30 秒刷新市场（登录失效后自动停止）
+  setInterval(loadTipInfo, 60000);
+})();
+</script>
+</body>
+</html>

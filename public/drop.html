@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🍊 天降橘子雨</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: radial-gradient(circle at 50% 0%, #ff9800 0%, #e65100 40%, #1a0a00 100%); color: #fff; font-family: -apple-system, "PingFang SC", sans-serif; min-height: 100vh; overflow: hidden; }
+  #rain { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
+  .orange { position: absolute; font-size: 32px; animation: fall linear; }
+  @keyframes fall { from { transform: translateY(-60px) rotate(0); opacity: 1; } to { transform: translateY(105vh) rotate(360deg); opacity: .6; } }
+  .header { position: relative; z-index: 10; display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: rgba(0,0,0,.35); }
+  .header h1 { font-size: 20px; color: #ffd54f; text-shadow: 0 0 12px #ff9800; }
+  .header a { color: #ffd54f; text-decoration: none; font-size: 14px; }
+  .panel { position: relative; z-index: 10; max-width: 480px; margin: 40px auto; background: rgba(0,0,0,.55); border: 2px solid #ff9800; border-radius: 20px; padding: 30px 24px; text-align: center; box-shadow: 0 0 40px rgba(255,152,0,.5); }
+  .panel .icon { font-size: 80px; margin-bottom: 16px; animation: bounce 1.5s ease-in-out infinite; }
+  @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-14px)} }
+  .panel h2 { color: #ffd54f; margin-bottom: 12px; font-size: 22px; }
+  .panel .status { font-size: 15px; color: #ffe0b2; margin-bottom: 20px; line-height: 1.6; }
+  .btn { padding: 14px 40px; border: none; border-radius: 30px; background: linear-gradient(135deg, #ff9800, #e65100); color: #fff; font-size: 17px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 16px rgba(255,152,0,.5); transition: transform .1s; }
+  .btn:active { transform: scale(.95); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .countdown { font-size: 40px; font-weight: 900; color: #ffd54f; margin: 16px 0; font-family: monospace; }
+  .claims { margin-top: 16px; font-size: 14px; color: #ffe0b2; }
+  .claim-item { padding: 4px 0; }
+  #toast { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #ffd54f; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #ff9800; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="rain"></div>
+<div class="header"><h1>🍊 天降橘子雨</h1><a href="/">← 返回聊天室</a></div>
+<div class="panel">
+  <div class="icon">🌧️</div>
+  <h2 id="title">等待橘子雨...</h2>
+  <div class="status" id="status">橘子雨来的时候，聊天室里前 3 个发言的人各得 50 🍊！</div>
+  <div class="countdown" id="countdown" style="display:none"></div>
+  <button class="btn" id="startBtn" style="display:none" onclick="__startDrop()">发起橘子雨</button>
+  <div class="claims" id="claims"></div>
+</div>
+<div id="toast"></div>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const token = localStorage.getItem('token');
+if (!token) location.href = '/';
+const socket = io({ auth: { token } });
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+function spawnRain(n) {
+  const rain = document.getElementById('rain');
+  for (let i = 0; i < n; i++) {
+    const o = document.createElement('div');
+    o.className = 'orange'; o.textContent = '🍊';
+    o.style.left = Math.random() * 100 + 'vw';
+    o.style.animationDuration = (2 + Math.random() * 2) + 's';
+    o.style.animationDelay = (Math.random() * 1.5) + 's';
+    o.style.fontSize = (24 + Math.random() * 24) + 'px';
+    rain.appendChild(o);
+    setTimeout(() => o.remove(), 5000);
+  }
+}
+let countdownTimer = null;
+function startCountdown(leftMs) {
+  clearInterval(countdownTimer);
+  const cd = document.getElementById('countdown');
+  cd.style.display = 'block';
+  let end = Date.now() + leftMs;
+  countdownTimer = setInterval(() => {
+    const left = Math.max(0, end - Date.now());
+    cd.textContent = (left / 1000).toFixed(1) + 's';
+    if (left <= 0) { clearInterval(countdownTimer); cd.style.display = 'none'; }
+  }, 100);
+}
+fetch('/api/drop/status', { headers: { Authorization: token } })
+  .then(r => r.json()).then(d => {
+    if (d.ok && d.active) {
+      document.getElementById('title').textContent = '橘子雨进行中！';
+      document.getElementById('status').textContent = '快回聊天室发言！前 3 名得 50 🍊！';
+      document.getElementById('startBtn').style.display = 'none';
+      spawnRain(30); startCountdown(d.leftMs);
+    } else {
+      document.getElementById('startBtn').style.display = 'inline-block';
+    }
+  });
+window.__startDrop = async function() {
+  const res = await fetch('/api/drop/start', { method: 'POST', headers: { Authorization: token } });
+  const d = await res.json();
+  if (d.ok) { toast('✅ 橘子雨已开始！'); document.getElementById('startBtn').style.display = 'none'; }
+  else { toast('❌ ' + (d.msg || '发起失败')); }
+};
+socket.on('drop_start', (d) => {
+  document.getElementById('title').textContent = '橘子雨来了！';
+  document.getElementById('status').textContent = '快回聊天室发言！前 3 名得 50 🍊！';
+  document.getElementById('startBtn').style.display = 'none';
+  document.getElementById('claims').innerHTML = '';
+  spawnRain(40); startCountdown(d.leftMs);
+});
+socket.on('drop_claim', (d) => {
+  toast('🎉 ' + d.displayName + ' 抢到 50🍊（' + d.claimIndex + '/' + d.total + '）');
+  const box = document.getElementById('claims');
+  const item = document.createElement('div');
+  item.className = 'claim-item';
+  item.textContent = d.claimIndex + '. ' + d.displayName + ' +50🍊';
+  box.appendChild(item);
+});
+socket.on('drop_end', () => {
+  document.getElementById('title').textContent = '橘子雨结束了';
+  document.getElementById('status').textContent = '下次再来！';
+  document.getElementById('startBtn').style.display = 'inline-block';
+  clearInterval(countdownTimer);
+  document.getElementById('countdown').style.display = 'none';
+});
+</script>
+</body>
+</html>

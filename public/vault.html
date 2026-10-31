@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🧠 橘域网共享记忆库</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0f171e; color: #e2e8f0; font-family: -apple-system, sans-serif; padding: 20px; min-height: 100vh; }
+  .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2d3748; padding-bottom: 15px; margin-bottom: 20px; max-width: 800px; margin-left: auto; margin-right: auto;}
+  .header h1 { color: #38b2ac; font-size: 20px; }
+  .header a { color: #a0aec0; text-decoration: none; }
+  
+  .container { max-width: 800px; margin: 0 auto; }
+  
+  .search-box { display: flex; gap: 10px; margin-bottom: 30px; }
+  .search-box input { flex: 1; padding: 15px; border-radius: 8px; border: 1px solid #4a5568; background: #1a202c; color: #fff; font-size: 16px; outline: none; }
+  .search-box button { padding: 0 25px; border-radius: 8px; border: none; background: #38b2ac; color: #fff; font-weight: bold; font-size: 16px; cursor: pointer; }
+  
+  .ai-answer { background: #234e52; border-left: 4px solid #38b2ac; padding: 16px; border-radius: 8px; margin-bottom: 30px; display: none; }
+  .ai-answer h3 { color: #81e6d9; margin-bottom: 10px; font-size: 16px;}
+  .ai-answer p { line-height: 1.6; font-size: 15px; white-space: pre-wrap;}
+  
+  .section-title { font-size: 18px; margin-bottom: 15px; color: #cbd5e0; }
+  
+  .add-box { background: #1a202c; border: 1px solid #2d3748; padding: 20px; border-radius: 8px; margin-bottom: 30px; }
+  .add-box input, .add-box textarea { width: 100%; background: #2d3748; border: none; border-radius: 6px; padding: 12px; color: #fff; margin-bottom: 12px; outline: none; font-family: inherit;}
+  .add-box textarea { height: 100px; resize: none; }
+  .add-box button { padding: 10px 20px; border-radius: 6px; border: none; background: #38b2ac; color: #fff; font-weight: bold; cursor: pointer; }
+  
+  .vault-list { display: flex; flex-direction: column; gap: 16px; }
+  .vault-item { background: #1a202c; border: 1px solid #2d3748; padding: 16px; border-radius: 8px; transition: 0.2s; }
+  .vault-item:hover { border-color: #4a5568; }
+  .vault-item h3 { font-size: 17px; color: #63b3ed; margin-bottom: 8px; }
+  .vault-item p { font-size: 14px; color: #a0aec0; line-height: 1.6; white-space: pre-wrap; margin-bottom: 12px;}
+  .vault-meta { font-size: 12px; color: #718096; display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🧠 橘域网共享记忆库</h1>
+  <a href="/">← 返回大厅</a>
+</div>
+
+<div class="container">
+  <!-- AI 搜索 -->
+  <div class="search-box">
+    <input type="text" id="search-query" placeholder="问点什么？比如：怎么减重？或者某个游戏攻略..." onkeydown="if(event.key==='Enter') __search()">
+    <button onclick="__search()">AI 检索</button>
+  </div>
+
+  <div class="ai-answer" id="ai-answer">
+    <h3>🤖 AI 检索结果</h3>
+    <p id="ai-answer-text"></p>
+  </div>
+
+  <!-- 添加记忆 -->
+  <div class="add-box">
+    <div class="section-title">✍️ 存入新记忆</div>
+    <input type="text" id="v-title" placeholder="记忆标题 (例如：长弓溪谷狙击点)">
+    <textarea id="v-content" placeholder="详细内容 (所有人都能看到)..."></textarea>
+    <button onclick="__addMemory()">存入记忆库</button>
+  </div>
+
+  <!-- 全部记忆列表 -->
+  <div class="section-title">📚 全站最新记忆</div>
+  <div class="vault-list" id="vault-list"></div>
+</div>
+
+<script>
+let myToken = localStorage.getItem('token');
+
+function loadVault() {
+  fetch('/api/vault', { headers: { 'Authorization': myToken } }).then(r=>r.json()).then(d => {
+    if (!d.ok) return;
+    const list = document.getElementById('vault-list');
+    if (d.vault.length === 0) {
+      list.innerHTML = '<div style="color:#718096;">记忆库还是空的，来存入第一条吧！</div>';
+      return;
+    }
+    list.innerHTML = d.vault.map(item => `
+      <div class="vault-item">
+        <h3>${item.title}</h3>
+        <p>${item.content}</p>
+        <div class="vault-meta">
+          <span>存入者: ${item.author}</span>
+          <span>${new Date(item.time).toLocaleString()}</span>
+        </div>
+      </div>
+    `).join('');
+  });
+}
+
+window.__addMemory = async function() {
+  const title = document.getElementById('v-title').value.trim();
+  const content = document.getElementById('v-content').value.trim();
+  if (!title || !content) return alert('标题和内容不能为空');
+  
+  const btn = event.target;
+  btn.disabled = true; btn.innerText = '存入中...';
+  
+  await fetch('/api/vault', {
+    method: 'POST', headers: { 'Authorization': myToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, content })
+  }).then(r=>r.json()).then(d => {
+    if (d.ok) {
+      document.getElementById('v-title').value = '';
+      document.getElementById('v-content').value = '';
+      loadVault();
+    } else alert(d.msg);
+  });
+  btn.disabled = false; btn.innerText = '存入记忆库';
+};
+
+window.__search = async function() {
+  const query = document.getElementById('search-query').value.trim();
+  if (!query) return alert('请输入要搜索的内容');
+  
+  const answerBox = document.getElementById('ai-answer');
+  const answerText = document.getElementById('ai-answer-text');
+  
+  answerBox.style.display = 'block';
+  answerText.innerText = 'AI 正在思考并检索记忆库...';
+  
+  try {
+    const res = await fetch('/api/vault/search', {
+      method: 'POST', headers: { 'Authorization': myToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query })
+    });
+    const d = await res.json();
+    
+    if (d.ok) {
+      answerText.innerText = d.answer;
+      // 滚动到最上面看答案
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      answerText.innerText = '检索失败: ' + d.msg;
+    }
+  } catch(e) {
+    answerText.innerText = '网络错误';
+  }
+};
+
+loadVault();
+</script>
+</body>
+</html>

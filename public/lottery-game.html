@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🎫 赛博彩票</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: radial-gradient(circle at 50% 10%, #4a148c, #1a0033 70%, #000); color: #f3e5f5; font-family: -apple-system, "PingFang SC", sans-serif; min-height: 100vh; padding: 20px; }
+  .header { max-width: 600px; margin: 0 auto 20px; display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { color: #ce93d8; font-size: 22px; }
+  .header a { color: #ba68c8; text-decoration: none; font-size: 14px; }
+  .panel { max-width: 600px; margin: 0 auto 16px; background: rgba(74,20,140,.4); border: 2px solid #ab47bc; border-radius: 16px; padding: 22px; }
+  .panel h2 { color: #e1bee7; font-size: 17px; margin-bottom: 12px; }
+  .stat { display: flex; gap: 16px; flex-wrap: wrap; font-size: 14px; margin-bottom: 16px; }
+  .stat span { background: rgba(0,0,0,.35); padding: 8px 14px; border-radius: 10px; }
+  .stat b { color: #ffd54f; }
+  .balls { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0; justify-content: center; }
+  .ball { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; }
+  .ball.red { background: linear-gradient(145deg, #e53935, #b71c1c); color: #fff; }
+  .ball.blue { background: linear-gradient(145deg, #1e88e5, #0d47a1); color: #fff; }
+  .ball.empty { background: #333; color: #666; }
+  button { padding: 12px 24px; border: none; border-radius: 10px; background: linear-gradient(135deg, #ab47bc, #7b1fa2); color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; }
+  button:active { transform: scale(.97); }
+  .ticket { background: rgba(0,0,0,.3); border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; font-size: 14px; }
+  #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #ce93d8; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #ab47bc; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="header"><h1>🎫 赛博彩票</h1><a href="/">← 返回聊天室</a></div>
+<div class="panel">
+  <h2>📊 当前期</h2>
+  <div class="stat" id="stat">加载中...</div>
+  <div class="balls" id="myBalls"></div>
+  <button id="buyBtn" onclick="__buy()">🎫 买一注（10🍊）</button>
+</div>
+<div class="panel">
+  <h2>🎟 我的彩票</h2>
+  <div id="myTickets">还没有买彩票</div>
+</div>
+<div class="panel">
+  <h2>📜 往期开奖</h2>
+  <div id="history">加载中...</div>
+</div>
+<div id="toast"></div>
+<script>
+const token = localStorage.getItem('token');
+if (!token) location.href = '/';
+function toast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500); }
+function ballsHtml(reds, blue) {
+  return reds.map(n => '<div class="ball red">' + n + '</div>').join('') + '<div class="ball blue">' + blue + '</div>';
+}
+function load() {
+  fetch('/api/lottery-game/current', { headers: { Authorization: token } }).then(r => r.json()).then(d => {
+    if (!d.ok || !d.current) return;
+    const c = d.current;
+    document.getElementById('stat').innerHTML = '<span>第 <b>' + c.roundNo + '</b> 期</span><span>奖池 <b>' + c.prizePool + '</b> 🍊</span><span>已售 <b>' + c.ticketCount + '</b> 注</span>' + (c.drawn ? '<span style="color:#ef5350">已开奖</span>' : '');
+    document.getElementById('buyBtn').disabled = c.drawn;
+    const mt = document.getElementById('myTickets');
+    if (c.myTickets && c.myTickets.length) {
+      mt.innerHTML = c.myTickets.map(t => '<div class="ticket">' + ballsHtml(t.reds, t.blue) + '</div>').join('');
+    } else { mt.textContent = '还没有买彩票'; }
+  });
+  fetch('/api/lottery-game/history', { headers: { Authorization: token } }).then(r => r.json()).then(d => {
+    if (!d.ok) return;
+    const h = document.getElementById('history');
+    if (!d.history.length) { h.textContent = '还没有开奖记录'; return; }
+    h.innerHTML = d.history.map(x => '<div class="ticket">第 ' + x.roundNo + ' 期：' + ballsHtml(x.winning.reds, x.winning.blue) + ' · 奖池 ' + x.prizePool + '🍊</div>').join('');
+  });
+}
+window.__buy = async function() {
+  const d = await fetch('/api/lottery-game/buy', { method: 'POST', headers: { Authorization: token, 'Content-Type': 'application/json' }, body: JSON.stringify({}) }).then(r => r.json());
+  if (d.ok) { toast('🎫 买成功！号码已随机生成'); load(); }
+  else toast('❌ ' + d.msg);
+};
+const socket = io({ auth: { token } });
+socket.on('lottery_game_draw', d => { toast('🎉 第 ' + d.roundNo + ' 期开奖！中奖 ' + d.results.length + ' 注'); load(); });
+socket.on('lottery_game_new', d => { toast('🎫 第 ' + d.roundNo + ' 期开售'); load(); });
+load();
+</script>
+</body>
+</html>

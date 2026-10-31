@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>🎣 赛博捞鱼场</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0000FF; font-family: ui-monospace, monospace; overflow: hidden; height: 100vh; }
+  #game-canvas { display: block; width: 100vw; height: 100vh; }
+  .top-bar { position: fixed; top: 16px; left: 16px; right: 16px; display: flex; justify-content: space-between; pointer-events: none; z-index: 10; }
+  .top-bar a { pointer-events: auto; color: #fff; background: rgba(0,0,0,0.5); padding: 8px 16px; border-radius: 20px; text-decoration: none; font-size: 14px; border: 1px solid #333;}
+  .hud { color: #fff; background: rgba(0,0,0,0.5); padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: bold; border: 1px solid #333;}
+  .bubble { position: absolute; background: #fff; color: #000; padding: 6px 12px; border-radius: 16px; font-size: 13px; font-weight: bold; cursor: pointer; transform: translate(-50%, -100%); box-shadow: 0 4px 12px rgba(0,0,0,0.3); pointer-events: auto; white-space: nowrap; z-index: 100; }
+  .bubble:hover { transform: translate(-50%, -110%) scale(1.1); background: #00FFFF; }
+  .bubble::after { content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); border-width: 6px 6px 0; border-style: solid; border-color: #fff transparent transparent; }
+  #result-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center; z-index: 1000; }
+  .res-box { background: #111; border: 2px solid #00FFFF; border-radius: 16px; padding: 30px; text-align: center; width: 80%; max-width: 300px; box-shadow: 0 0 30px rgba(0,255,255,0.4); }
+  .res-box .icon { font-size: 60px; margin-bottom: 12px; }
+  .res-box .text { color: #fff; font-size: 18px; font-weight: bold; margin-bottom: 20px; }
+  .res-box button { background: #00FFFF; color: #000; border: none; padding: 10px 30px; border-radius: 20px; font-weight: bold; font-size: 16px; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="game-canvas"></canvas><div id="bubble-layer"></div>
+<div class="top-bar"><a href="/">← 返回</a><div class="hud" id="hud">已捞 0 次</div></div>
+<div id="result-modal"><div class="res-box"><div class="icon" id="res-icon">🐟</div><div class="text" id="res-text">捞到了！</div><button onclick="document.getElementById('result-modal').style.display='none'">继续捞</button></div></div>
+<script>
+let myToken = localStorage.getItem('token');
+const canvas = document.getElementById('game-canvas'); const ctx = canvas.getContext('2d');
+let W = canvas.width = window.innerWidth; let H = canvas.height = window.innerHeight;
+window.addEventListener('resize', () => { W = canvas.width = innerWidth; H = canvas.height = innerHeight; });
+const DIALOGUES = ["这块大石头刚好挡着我！", "我是石头，别捞我！", "救命，有人拿网兜来了！", "水真凉快，今天又是摸鱼的一天。", "我是长得像鱼的生姜！", "这水绝对是 16 进制纯蓝！", "老板，充点橘子吧求求了！", "下面黑乎乎的，我害怕。", "其实我是一条程序生成的假鱼。"];
+const fishes = []; const stones = [];
+for (let i=0; i<6; i++) {
+  const s = { x: Math.random()*W*0.8+W*0.1, y: Math.random()*H*0.8+H*0.1, r: Math.random()*40+30, pts: [] };
+  const p = 6 + Math.floor(Math.random()*3);
+  for (let j=0; j<p; j++) { const a=(j/p)*Math.PI*2; const r=s.r*(0.7+Math.random()*0.4); s.pts.push({x:Math.cos(a)*r, y:Math.sin(a)*r}); }
+  stones.push(s);
+}
+for (let i=0; i<15; i++) fishes.push({ x: Math.random()*W, y: Math.random()*H, vx: (Math.random()-0.5)*2, vy: (Math.random()-0.5)*1, size: Math.random()*15+10, id: 'f'+i, timer: Math.random()*200, text: null });
+function draw() {
+  ctx.fillStyle='#0000FF'; ctx.fillRect(0,0,W,H);
+  stones.forEach(s => { ctx.beginPath(); ctx.fillStyle='#3A3A4A'; s.pts.forEach((p,i)=>{ const px=s.x+p.x, py=s.y+p.y; if(i===0)ctx.moveTo(px,py); else ctx.lineTo(px,py); }); ctx.closePath(); ctx.fill(); });
+  fishes.forEach(f => {
+    f.x+=f.vx; f.y+=f.vy; if(f.x<0||f.x>W) f.vx*=-1; if(f.y<0||f.y>H) f.vy*=-1;
+    ctx.save(); ctx.shadowColor='#FFF'; ctx.shadowBlur=8; ctx.beginPath(); ctx.fillStyle='#0044FF'; ctx.ellipse(f.x,f.y,f.size,f.size*0.6,Math.atan2(f.vy,f.vx),0,Math.PI*2); ctx.fill(); ctx.restore();
+    f.timer--;
+    if (f.timer<=0 && !f.text) {
+      f.text = DIALOGUES[Math.floor(Math.random()*DIALOGUES.length)]; createBubble(f); f.timer = 300+Math.random()*400;
+    }
+    if (f.text) { const el = document.getElementById(f.id); if(el){ el.style.left=f.x+'px'; el.style.top=(f.y-f.size-10)+'px'; } }
+  });
+  requestAnimationFrame(draw);
+}
+draw();
+function createBubble(f) {
+  let el = document.getElementById(f.id);
+  if (!el) { el = document.createElement('div'); el.className='bubble'; el.id=f.id; document.getElementById('bubble-layer').appendChild(el); }
+  el.textContent = f.text; el.style.display = 'block';
+  el.onclick = (e) => { e.stopPropagation(); el.style.display='none'; f.text=null; f.timer=500; catchFish(); };
+}
+function catchFish() {
+  fetch('/api/fishing/catch', { method: 'POST', headers: { 'Authorization': myToken } }).then(r=>r.json()).then(d => {
+    if (d.ok) { document.getElementById('res-icon').textContent=d.emoji; document.getElementById('res-text').innerHTML=d.name+'<br><span style="font-size:12px;color:#aaa;">'+d.msg+'</span>'; document.getElementById('result-modal').style.display='flex'; document.getElementById('hud').textContent=`已捞 ${d.count} 次`; }
+    else alert(d.msg);
+  });
+}
+</script>
+<script src="/invite.js"></script>
+</body>
+</html>

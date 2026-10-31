@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📊 老板数据大屏 · 橘域网</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: radial-gradient(circle at 20% 10%, #101a2b 0%, #070b14 55%, #03060c 100%);
+    color: #d7e6ff; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", monospace;
+    min-height: 100vh; padding: 20px;
+  }
+  .glow { text-shadow: 0 0 12px rgba(0, 220, 255, .55); }
+  header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+  h1 { font-size: 22px; letter-spacing: 2px; color: #6ff; }
+  #meta { font-size: 12px; color: #7a8ca8; }
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
+  .card {
+    background: linear-gradient(160deg, rgba(18, 32, 52, .92), rgba(8, 16, 28, .92));
+    border: 1px solid rgba(0, 200, 255, .22); border-radius: 12px;
+    padding: 16px 18px; position: relative; overflow: hidden;
+  }
+  .card::before {
+    content: ''; position: absolute; left: 0; top: 0; width: 100%; height: 2px;
+    background: linear-gradient(90deg, transparent, #0ff, transparent); opacity: .7;
+  }
+  .card .label { font-size: 12px; color: #7fa4c9; letter-spacing: 1px; }
+  .card .value { font-size: 34px; font-weight: 700; color: #6ff; margin-top: 6px; }
+  .card .sub { font-size: 12px; color: #8fa7c4; margin-top: 4px; }
+  .charts { display: grid; grid-template-columns: 1fr 1.4fr; gap: 14px; margin-bottom: 16px; }
+  .panel {
+    background: linear-gradient(160deg, rgba(14, 26, 44, .9), rgba(6, 12, 22, .9));
+    border: 1px solid rgba(0, 200, 255, .18); border-radius: 12px; padding: 8px;
+  }
+  .panel h3 { font-size: 13px; color: #8fd7ff; padding: 6px 8px 2px; letter-spacing: 1px; }
+  .chart { width: 100%; height: 260px; }
+  .focus { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .focus .card .value { font-size: 22px; }
+  .focus .tag { display: inline-block; margin-top: 6px; font-size: 11px; padding: 2px 8px; border-radius: 20px; border: 1px solid rgba(0, 255, 200, .4); color: #5ef0c0; }
+  .focus .tag.warn { border-color: rgba(255, 180, 0, .45); color: #ffc34d; }
+  @media (max-width: 900px) {
+    .cards { grid-template-columns: repeat(2, 1fr); }
+    .charts { grid-template-columns: 1fr; }
+    .focus { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1 class="glow">📊 老板数据大屏</h1>
+  <div id="meta">连接中…</div>
+</header>
+
+<div class="cards">
+  <div class="card"><div class="label">👥 用户总数</div><div class="value" id="v-users">-</div><div class="sub" id="s-online">在线 -</div></div>
+  <div class="card"><div class="label">🍊 橘子总量</div><div class="value" id="v-oranges">-</div><div class="sub">全站余额合计</div></div>
+  <div class="card"><div class="label">💬 消息总数</div><div class="value" id="v-msgs">-</div><div class="sub" id="s-msgs-today">今日 -</div></div>
+  <div class="card"><div class="label">📡 情报条数</div><div class="value" id="v-intel">-</div><div class="sub" id="s-intel">中 - / 英 -</div></div>
+</div>
+
+<div class="charts">
+  <div class="panel"><h3>📈 赛博股市（涨绿跌红）</h3><div id="chart-stock" class="chart"></div></div>
+  <div class="panel"><h3>💬 近 24 小时消息</h3><div id="chart-msgs" class="chart"></div></div>
+</div>
+
+<div class="focus">
+  <div class="card"><div class="label">🍀 今日锦鲤</div><div class="value" id="f-koi">-</div><div class="sub" id="f-koi-sub">-</div></div>
+  <div class="card"><div class="label">🧠 今日一题</div><div class="value" id="f-quiz" style="font-size:16px">-</div><div class="sub" id="f-quiz-sub">-</div></div>
+  <div class="card"><div class="label">🎫 赛博彩票</div><div class="value" id="f-lottery">-</div><div class="sub" id="f-lottery-sub">-</div></div>
+</div>
+
+<script>
+const stockChart = echarts.init(document.getElementById('chart-stock'), null, { renderer: 'canvas' });
+const msgChart = echarts.init(document.getElementById('chart-msgs'), null, { renderer: 'canvas' });
+
+function fmt(n) {
+  if (typeof n !== 'number') return '-';
+  return n.toLocaleString('zh-CN');
+}
+
+function renderStock(stocks) {
+  if (!Array.isArray(stocks) || stocks.length === 0) {
+    stockChart.setOption({ title: { text: '暂无股票数据', left: 'center', top: 'middle', textStyle: { color: '#5a7699', fontSize: 13 } } }, true);
+    return;
+  }
+  const names = stocks.map(s => s.name);
+  const prices = stocks.map(s => s.price);
+  const colors = stocks.map(s => s.trend === 'up' ? '#27d17c' : (s.trend === 'down' ? '#ff5d6c' : '#8fa7c4'));
+  stockChart.setOption({
+    grid: { left: 50, right: 20, top: 30, bottom: 30 },
+    xAxis: { type: 'category', data: names, axisLine: { lineStyle: { color: '#2a4258' } }, axisLabel: { color: '#9fb8d4', fontSize: 11 } },
+    yAxis: { type: 'value', axisLine: { show: false }, splitLine: { lineStyle: { color: 'rgba(80,120,160,.15)' } }, axisLabel: { color: '#7f97b3', fontSize: 11 } },
+    tooltip: { trigger: 'axis', backgroundColor: 'rgba(8,18,32,.95)', borderColor: '#1e3a55', textStyle: { color: '#cfe6ff' } },
+    series: [{
+      type: 'bar', data: prices.map((v, i) => ({ value: v, itemStyle: { color: colors[i], borderRadius: [4, 4, 0, 0] } })),
+      barWidth: '46%',
+      label: { show: true, position: 'top', color: '#bfe0ff', fontSize: 11 }
+    }]
+  }, true);
+}
+
+function renderMsgs(buckets) {
+  const labels = [];
+  const now = new Date();
+  for (let i = 23; i >= 0; i--) {
+    const h = new Date(now.getTime() - i * 3600000).getHours();
+    labels.push(String(h).padStart(2, '0') + ':00');
+  }
+  msgChart.setOption({
+    grid: { left: 40, right: 20, top: 30, bottom: 30 },
+    xAxis: { type: 'category', data: labels, boundaryGap: false, axisLine: { lineStyle: { color: '#2a4258' } }, axisLabel: { color: '#9fb8d4', fontSize: 10, interval: 3 } },
+    yAxis: { type: 'value', axisLine: { show: false }, splitLine: { lineStyle: { color: 'rgba(80,120,160,.15)' } }, axisLabel: { color: '#7f97b3', fontSize: 11 } },
+    tooltip: { trigger: 'axis', backgroundColor: 'rgba(8,18,32,.95)', borderColor: '#1e3a55', textStyle: { color: '#cfe6ff' } },
+    series: [{
+      type: 'line', data: buckets, smooth: true, symbol: 'circle', symbolSize: 5,
+      lineStyle: { color: '#00d8ff', width: 2, shadowColor: 'rgba(0,216,255,.5)', shadowBlur: 10 },
+      itemStyle: { color: '#00d8ff' },
+      areaStyle: {
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: 'rgba(0,216,255,.35)' },
+          { offset: 1, color: 'rgba(0,216,255,.02)' }
+        ])
+      }
+    }]
+  }, true);
+}
+
+function renderFocus(focus) {
+  const koi = focus && focus.koi;
+  const quiz = focus && focus.quiz;
+  const lottery = focus && focus.lottery;
+
+  if (koi) {
+    document.getElementById('f-koi').textContent = koi.displayName || '-';
+    document.getElementById('f-koi-sub').textContent = koi.date || '';
+  } else {
+    document.getElementById('f-koi').textContent = '今日未抽';
+    document.getElementById('f-koi-sub').textContent = '-';
+  }
+
+  if (quiz) {
+    document.getElementById('f-quiz').textContent = quiz.question || '-';
+    document.getElementById('f-quiz-sub').textContent = quiz.answered
+      ? ('✅ ' + (quiz.winnerName || '已答对'))
+      : '⏳ 等待作答';
+  } else {
+    document.getElementById('f-quiz').textContent = '今日无题';
+    document.getElementById('f-quiz-sub').textContent = '-';
+  }
+
+  if (lottery) {
+    document.getElementById('f-lottery').textContent = '第 ' + lottery.roundNo + ' 期';
+    document.getElementById('f-lottery-sub').textContent =
+      '奖池 ' + fmt(lottery.prizePool) + ' 🍊 · ' + (lottery.drawn ? '已开奖' : '进行中');
+  } else {
+    document.getElementById('f-lottery').textContent = '未开售';
+    document.getElementById('f-lottery-sub').textContent = '-';
+  }
+}
+
+async function load() {
+  const meta = document.getElementById('meta');
+  try {
+    const token = localStorage.getItem('token') || '';
+    const r = await fetch('/api/stats/dashboard', {
+      headers: token ? { Authorization: token } : {},
+      cache: 'no-store'
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.msg || '接口返回 ok=false');
+
+    document.getElementById('v-users').textContent = fmt(d.users.total);
+    document.getElementById('s-online').textContent = '在线 ' + fmt(d.users.online);
+    document.getElementById('v-oranges').textContent = fmt(d.oranges.total);
+    document.getElementById('v-msgs').textContent = fmt(d.messages.total);
+    document.getElementById('s-msgs-today').textContent = '今日 ' + fmt(d.messages.today);
+    document.getElementById('v-intel').textContent = fmt(d.intel.total);
+    document.getElementById('s-intel').textContent = '中 ' + fmt(d.intel.cn) + ' / 英 ' + fmt(d.intel.en);
+
+    renderStock(d.stocks);
+    renderMsgs(d.messages.last24Buckets);
+    renderFocus({ koi: d.koi, quiz: d.quiz, lottery: d.lottery });
+
+    const t = new Date(d.ts || Date.now());
+    meta.textContent = '更新于 ' + t.toLocaleTimeString('zh-CN') + ' · 30s 自动刷新';
+    meta.style.color = '#7fe0c0';
+  } catch (e) {
+    meta.textContent = '加载失败：' + e.message + '（30s 后重试）';
+    meta.style.color = '#ff8a8a';
+  }
+}
+
+load();
+setInterval(load, 30000);
+
+window.addEventListener('resize', () => {
+  stockChart.resize();
+  msgChart.resize();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🥬 食材交易行</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #1e2918; color: #f5f5f5; min-height: 100vh; padding: 20px; }
+  .header { text-align: center; margin-bottom: 24px; }
+  .header h1 { margin: 0 0 10px; color: #8bc34a; text-shadow: 0 2px 10px rgba(139,195,74,0.4); }
+  .header a { color: #8bc34a; text-decoration: none; font-size: 14px; }
+  
+  .panel { background: rgba(0,0,0,0.3); border-radius: 16px; padding: 20px; max-width: 600px; margin: 0 auto 20px; border: 1px solid #3e4a35; }
+  .panel h2 { margin: 0 0 16px; font-size: 18px; color: #8bc34a; }
+  
+  .sell-area { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 10px; }
+  .sell-area select, .sell-area input { padding: 10px; border-radius: 6px; border: 1px solid #444; background: #2a3324; color: #fff; font-size: 14px; outline: none; }
+  .sell-area button { padding: 10px 24px; background: #8bc34a; color: #1e2918; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+  .item-card { background: #2a3324; padding: 16px; border-radius: 12px; text-align: center; border: 1px solid #3e4a35; }
+  .item-card .emoji { font-size: 40px; margin-bottom: 8px; }
+  .item-card .name { font-size: 14px; font-weight: bold; color: #ccc; margin-bottom: 4px; }
+  .item-card .seller { font-size: 12px; color: #888; margin-bottom: 8px; }
+  .item-card .price { color: #ffd54f; font-size: 18px; font-weight: bold; margin-bottom: 12px; }
+  .item-card button { width: 100%; padding: 8px; background: #8bc34a; color: #1e2918; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+  .item-card button:disabled { background: #555; color: #888; cursor: not-allowed; }
+
+  .recycle-list { display: flex; flex-direction: column; gap: 10px; }
+  .recycle-item { display: flex; justify-content: space-between; align-items: center; background: #2a3324; padding: 12px 16px; border-radius: 8px; }
+  .recycle-item .left { font-size: 16px; display: flex; align-items: center; gap: 8px; }
+  .recycle-item .left span { font-size: 24px; }
+  .recycle-item button { padding: 6px 12px; background: transparent; color: #f39c12; border: 1px solid #f39c12; border-radius: 6px; cursor: pointer; }
+  #error-tip { display: none; background: #b71c1c; color: #fff; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🥬 食材交易行</h1>
+  <p>买卖食材，发家致富，或者填饱肚子。</p>
+  <a href="/">← 返回聊天室</a>
+</div>
+
+<div id="error-tip">加载失败，请检查后端服务是否正常。</div>
+
+<div class="panel">
+  <h2>🏪 上架食材</h2>
+  <div class="sell-area">
+    <select id="sell-emoji"></select>
+    <input id="sell-price" type="number" placeholder="定价 (🍊)" min="1">
+    <button onclick="sellItem()">上架</button>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>🛒 正在出售</h2>
+  <div class="grid" id="market-list">加载中...</div>
+</div>
+
+<div class="panel">
+  <h2>♻️ 系统回收 (直接卖钱)</h2>
+  <div class="recycle-list" id="recycle-list">加载中...</div>
+</div>
+
+<script>
+(function() {
+  var token = localStorage.getItem('token');
+  if (!token) location.href = '/';
+
+  // 食材字典 (前端用来显示中文)
+  var NAME_DICT = {
+    '🥚': '鸡蛋', '🧅': '洋葱', '🥬': '生菜', '🥔': '土豆', '🥒': '黄瓜', '🌽': '玉米',
+    '🍗': '鸡腿', '🍤': '虾滑', '🥓': '培根', '🍄': '金针菇', '🥦': '西兰花', '🥬2': '韭菜',
+    '🍜': '方便面', '🍪': '干脆面', '🥤': '奶茶', '🧋': '黑珍珠',
+    '🥩': '顶级牛肉', '🥩2': '顶级羊肉', '🦞': '龙虾', '🐟': '三文鱼', '🍫': '巧克力',
+    '🫚': '生姜', '🌿': '香菜'
+  };
+
+  function getName(emoji) {
+    return NAME_DICT[emoji] || emoji;
+  }
+
+  function showError() {
+    document.getElementById('error-tip').style.display = 'block';
+    document.getElementById('market-list').innerHTML = '';
+    document.getElementById('recycle-list').innerHTML = '';
+  }
+
+  function loadInventoryForSelect() {
+    fetch('/api/food/inventory', { headers: { 'Authorization': token } })
+      .then(r => r.json()).then(d => {
+        if (!d.ok) return;
+        var inv = d.inventory || {};
+        var select = document.getElementById('sell-emoji');
+        var keys = Object.keys(inv);
+        
+        if (keys.length === 0) {
+          select.innerHTML = '<option value="">没有食材</option>';
+          document.getElementById('recycle-list').innerHTML = '<div style="color:#888">空空如也</div>';
+          return;
+        }
+        
+        select.innerHTML = keys.map(k => `<option value="${k}">${getName(k)} (库存: ${inv[k]})</option>`).join('');
+        
+        var recycle = document.getElementById('recycle-list');
+        recycle.innerHTML = keys.map(k => {
+          // 粗略的默认回收价
+          var price = 1;
+          if (k === '🥩' || k === '🥩2') price = 10;
+          if (k === '🦞') price = 20;
+          if (k === '🫚') price = -10;
+          
+          return `<div class="recycle-item">
+            <div class="left"><span>${k}</span>${getName(k)} x ${inv[k]}</div>
+            <button onclick="recycle('${k}')">回收 ${price > 0 ? '+' : ''}${price}🍊</button>
+          </div>`;
+        }).join('');
+      }).catch(showError);
+  }
+
+  function loadMarket() {
+    fetch('/api/food/market')
+      .then(r => r.json()).then(d => {
+        var list = document.getElementById('market-list');
+        if (!d.ok || !d.market || d.market.length === 0) {
+          list.innerHTML = '<div style="color:#888;grid-column:1/-1;text-align:center;padding:20px">货架空空如也</div>';
+          return;
+        }
+        list.innerHTML = d.market.map(item => {
+          return `<div class="item-card">
+            <div class="emoji">${item.emoji}</div>
+            <div class="name">${getName(item.emoji)}</div>
+            <div class="seller">卖家: ${item.sellerName}</div>
+            <div class="price">${item.price} 🍊</div>
+            <button onclick="buy('${item.id}')">买下</button>
+          </div>`;
+        }).join('');
+      }).catch(showError);
+  }
+
+  window.sellItem = function() {
+    var emoji = document.getElementById('sell-emoji').value;
+    var price = document.getElementById('sell-price').value;
+    if (!emoji || !price) return alert('请选择食材和价格');
+    
+    fetch('/api/food/market/sell', {
+      method: 'POST', headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emoji, price: Number(price) })
+    }).then(r => r.json()).then(d => {
+      if (d.ok) { 
+        alert('上架成功'); 
+        loadInventoryForSelect(); 
+        loadMarket(); 
+        document.getElementById('sell-price').value = ''; 
+      } else alert(d.msg);
+    }).catch(showError);
+  };
+
+  window.buy = function(id) {
+    if (!confirm('确定买下这个食材吗？')) return;
+    fetch('/api/food/market/buy', {
+      method: 'POST', headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId: id })
+    }).then(r => r.json()).then(d => {
+      if (d.ok) { alert('购买成功，食材已入库！'); loadInventoryForSelect(); loadMarket(); }
+      else alert(d.msg);
+    }).catch(showError);
+  };
+
+  window.recycle = function(emoji) {
+    fetch('/api/food/market/recycle', {
+      method: 'POST', headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emoji })
+    }).then(r => r.json()).then(d => {
+      if (d.ok) { alert('回收成功'); loadInventoryForSelect(); }
+      else alert(d.msg);
+    }).catch(showError);
+  };
+
+  loadInventoryForSelect();
+  loadMarket();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🔥 火柴人平台大决战</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0a; font-family: ui-monospace, monospace; overflow: hidden; height: 100vh; color: #fff; user-select: none; }
+  #game-canvas { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+  .top-bar { position: fixed; top: 16px; left: 16px; right: 16px; display: flex; justify-content: space-between; pointer-events: none; z-index: 10; }
+  .top-bar a { pointer-events: auto; color: #fff; background: rgba(0,0,0,0.5); padding: 8px 16px; border-radius: 20px; text-decoration: none; font-size: 14px; border: 1px solid #333;}
+  .hud { color: #fff; background: rgba(0,0,0,0.5); padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: bold; border: 1px solid #333;}
+  
+  .joystick-zone { position: fixed; bottom: 30px; width: 120px; height: 120px; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); border-radius: 50%; display: none; z-index: 100; touch-action: none; }
+  #joy-left { left: 30px; } #joy-right { right: 30px; }
+  .joystick-knob { position: absolute; top: 35px; left: 35px; width: 50px; height: 50px; background: rgba(255,255,255,0.3); border-radius: 50%; }
+  .action-btn { position: fixed; width: 60px; height: 60px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.2); color: #fff; font-weight: bold; display: none; align-items: center; justify-content: center; z-index: 100; touch-action: none; }
+  #btn-fire { bottom: 160px; right: 60px; background: rgba(255,50,50,0.3); border-color: rgba(255,50,50,0.5); }
+  #btn-jump { bottom: 30px; right: 160px; }
+</style>
+<script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+
+<canvas id="game-canvas"></canvas>
+<div class="top-bar">
+  <a href="/">← 返回大厅</a>
+  <div class="hud" id="hud">等待对手连接...</div>
+</div>
+
+<div class="joystick-zone" id="joy-left"><div class="joystick-knob" id="knob-left"></div></div>
+<div class="joystick-zone" id="joy-right"><div class="joystick-knob" id="knob-right"></div></div>
+<button class="action-btn" id="btn-fire">开火</button>
+<button class="action-btn" id="btn-jump">跳</button>
+<script src="/invite.js"></script>
+
+<script>
+const token = localStorage.getItem('token');
+const socket = io({ auth: { token } });
+window.socket = socket;
+
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+let W = canvas.width = window.innerWidth;
+let H = canvas.height = window.innerHeight;
+
+window.addEventListener('resize', () => { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; initMap(); });
+
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+if (isMobile) {
+  document.getElementById('joy-left').style.display = 'block';
+  document.getElementById('joy-right').style.display = 'block';
+  document.getElementById('btn-fire').style.display = 'flex';
+  document.getElementById('btn-jump').style.display = 'flex';
+}
+
+// ==== 游戏核心参数 ====
+const GRAVITY = 0.6;
+const MOVE_SPEED = 6;
+const JUMP_FORCE = -13.5;
+const PLAYER_W = 15;
+const PLAYER_H = 48; const PLAYER_RADIUS = 10;
+
+let mySide = 'left';
+let myId = null;
+
+const player = { x: 100, y: 100, vy: 0, color: '#00FFFF', hp: 100, aimAngle: 0, fireCooldown: 0, isGrounded: false, jumpCount: 0, animTime: 0, isMoving: false };
+let remotePlayer = null;
+let platforms = [];
+let obstacles = [];
+let bullets = [];
+let particles = [];
+let screenShake = 0;
+
+// ==== 生成随机地图 ====
+function initMap() {
+  platforms = [
+    { x: 0, y: H - 40, w: W, h: 40 },
+    { x: W*0.2, y: H - 180, w: 150, h: 20 },
+    { x: W*0.6, y: H - 250, w: 200, h: 20 },
+    { x: W*0.4, y: H - 350, w: 120, h: 20 }
+  ];
+  obstacles = [];
+  
+  // 垂直掩体
+  for(let i=0; i<3; i++) {
+    const px = Math.random() * W * 0.8 + W * 0.1;
+    if (px < 200 || px > W - 200) continue;
+    obstacles.push({ type: 'pillar', x: px, y: H - 160, w: 20, h: 120, color: '#4a4a4a' });
+  }
+
+  // 木箱
+  for(let i=0; i<4; i++) {
+    const bx = Math.random() * W * 0.8 + W * 0.1;
+    const by = H - 80;
+    if (bx < 200 || bx > W - 200) continue;
+    obstacles.push({ type: 'box', x: bx, y: by, w: 40, h: 40, color: '#8b5a2b' });
+  }
+
+  // 医疗包
+  if (Math.random() < 0.8) {
+    const targetPlat = platforms[Math.floor(Math.random() * platforms.length)];
+    let evtX = targetPlat.x + 20;
+    if (targetPlat.w > 40) evtX = targetPlat.x + Math.random() * (targetPlat.w - 40) + 10;
+    obstacles.push({ type: 'heal', x: evtX, y: targetPlat.y - 20, w: 20, h: 20 });
+  }
+}
+
+// ==== 联机通信 ====
+socket.on('connect', () => { socket.emit('duel_join'); });
+socket.on('duel_error', (msg) => { alert(msg); location.href='/'; });
+
+socket.on('duel_init', (data) => {
+  myId = data.myId;
+  mySide = data.side;
+  player.x = mySide === 'left' ? 100 : W - 100;
+  player.color = mySide === 'left' ? '#00FFFF' : '#FF4444';
+  player.y = H - 100;
+  document.getElementById('hud').innerText = '已进入游戏，等待对手...';
+  initMap();
+});
+
+socket.on('duel_state', (players) => {
+  const others = Object.values(players).filter(p => p.id !== myId);
+  if (others.length > 0) {
+    if (!remotePlayer) remotePlayer = others[0];
+    remotePlayer.name = others[0].name;
+    remotePlayer.hp = others[0].hp;
+    document.getElementById('hud').innerText = `对战: 你(${player.hp}) vs ${remotePlayer.name}(${remotePlayer.hp})`;
+  } else {
+    remotePlayer = null;
+    document.getElementById('hud').innerText = '等待对手连接...';
+  }
+});
+
+socket.on('duel_update', (data) => {
+  if (remotePlayer) { remotePlayer.lastX = remotePlayer.x; remotePlayer.x = data.x; remotePlayer.y = data.y; remotePlayer.aimAngle = data.aimAngle; }
+});
+
+socket.on('duel_bullet', (b) => {
+  bullets.push({ x: b.x, y: b.y, vx: b.vx, vy: b.vy, owner: 'remote', bounces: 10 });
+});
+
+socket.on('duel_damage', (dmg) => {
+  player.hp -= dmg;
+  screenShake = 15;
+  for(let k=0; k<10; k++) particles.push({ x: player.x, y: player.y - PLAYER_H/2, vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, life: 20, color: '#e74c3c' });
+  if (player.hp <= 0) { alert('你被打成塞子了！'); location.reload(); }
+});
+
+// ==== 输入控制 ====
+const keys = {};
+let leftJoy = {x:0, y:0};
+let rightJoy = {x:0, y:0};
+let isFiring = false;
+let mouseX = 0, mouseY = 0;
+
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space' || e.code === 'KeyW' || e.code === 'ArrowUp') { e.preventDefault(); jump(); }
+});
+window.addEventListener('keyup', e => keys[e.code] = false);
+window.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
+window.addEventListener('mousedown', () => isFiring = true);
+window.addEventListener('mouseup', () => isFiring = false);
+
+function jump() {
+  // 无限段跳，但加个极短的冷却防止一帧连跳 100 次
+  if (Date.now() - (player.lastJumpTime || 0) > 150) {
+    player.vy = JUMP_FORCE; 
+    player.isGrounded = false; 
+    player.lastJumpTime = Date.now();
+  }
+}
+
+function setupJoystick(zone, knob, cb) {
+  const z = document.getElementById(zone); const k = document.getElementById(knob); let drag = false; let cx=0, cy=0;
+  z.addEventListener('touchstart', e => { e.preventDefault(); const r = z.getBoundingClientRect(); cx = r.left+r.width/2; cy = r.top+r.height/2; drag = true; });
+  window.addEventListener('touchmove', e => { if(!drag) return; e.preventDefault(); const t = e.touches[0]; let dx=t.clientX-cx, dy=t.clientY-cy; const d=Math.hypot(dx,dy); if(d>35){dx=dx/d*35;dy=dy/d*35;} k.style.transform=`translate(${dx}px,${dy}px)`; cb(dx/35,dy/35); }, {passive:false});
+  window.addEventListener('touchend', () => { drag = false; k.style.transform='translate(0,0)'; cb(0,0); });
+}
+
+if (isMobile) {
+  setupJoystick('joy-left','knob-left',(x,y)=>leftJoy={x,y});
+  setupJoystick('joy-right','knob-right',(x,y)=>rightJoy={x,y});
+  document.getElementById('btn-jump').addEventListener('touchstart', e=>{e.preventDefault(); jump();}, {passive: false});
+  document.getElementById('btn-fire').addEventListener('touchstart', e=>{e.preventDefault(); isFiring=true;}, {passive: false});
+  document.getElementById('btn-fire').addEventListener('touchend', e=>{e.preventDefault(); isFiring=false;}, {passive: false});
+}
+
+// ==== 物理与更新 ====
+function update() {
+  let mx = 0;
+  if (keys['KeyA'] || keys['ArrowLeft']) mx -= 1;
+  if (keys['KeyD'] || keys['ArrowRight']) mx += 1;
+  if (isMobile) mx = leftJoy.x;
+
+  if (Math.abs(mx) > 0.1 && player.isGrounded) {
+    player.isMoving = true;
+    player.animTime += 0.2;
+  } else {
+    player.isMoving = false;
+    player.animTime = 0;
+  }
+
+  // --- 横向移动与防穿模 ---
+  player.x += mx * MOVE_SPEED;
+  const allSolids = platforms.concat(obstacles.filter(o => o.type !== 'heal'));
+  
+  for (let p of allSolids) {
+    // 如果发生横向重叠
+    if (player.x + PLAYER_RADIUS > p.x && player.x - PLAYER_RADIUS < p.x + p.w &&
+        player.y > p.y && player.y - PLAYER_H < p.y + p.h) {
+      if (mx > 0) player.x = p.x - PLAYER_RADIUS;
+      else if (mx < 0) player.x = p.x + p.w + PLAYER_RADIUS;
+    }
+  }
+  if (player.x < PLAYER_RADIUS) player.x = PLAYER_RADIUS;
+  if (player.x > W - PLAYER_RADIUS) player.x = W - PLAYER_RADIUS;
+
+  // --- 纵向重力与防鬼畜落地 ---
+  player.vy += GRAVITY;
+  player.y += player.vy;
+  player.isGrounded = false;
+
+  for (let p of allSolids) {
+    // 如果发生纵向重叠
+    if (player.x + PLAYER_RADIUS > p.x && player.x - PLAYER_RADIUS < p.x + p.w &&
+        player.y > p.y && player.y - PLAYER_H < p.y + p.h) {
+      
+      // 是从上面掉下来的（脚底碰到了平台顶）
+      if (player.vy > 0 && (player.y - player.vy) <= p.y + 10) {
+        player.y = p.y; // 脚底死死贴着平台
+        player.vy = 0;  // 速度清零，绝对不抖
+        player.isGrounded = true;
+        player.jumpCount = 0;
+      }
+      // 是从下面顶到了天花板（头顶碰到了平台底）
+      else if (player.vy < 0 && (player.y - PLAYER_H - player.vy) >= p.y + p.h - 10) {
+        player.y = p.y + p.h + PLAYER_H;
+        player.vy = 0;
+      }
+    }
+  }
+
+  // 掉出地图底部
+  if (player.y - PLAYER_H > H) { player.y = 0; player.hp -= 20; }
+
+  // --- 瞄准与开火 ---
+  if (isMobile && (rightJoy.x!==0 || rightJoy.y!==0)) player.aimAngle = Math.atan2(rightJoy.y, rightJoy.x);
+  else if (!isMobile) player.aimAngle = Math.atan2(mouseY - (player.y - PLAYER_H/2), mouseX - player.x);
+  
+  if (player.fireCooldown > 0) player.fireCooldown--;
+  if (isFiring && player.fireCooldown <= 0) {
+    const sx = player.x + Math.cos(player.aimAngle) * 20;
+    const sy = player.y - PLAYER_H/2 + Math.sin(player.aimAngle) * 20;
+    
+    // 根据武器类型发射不同的子弹
+    if (player.weapon === 'shotgun') {
+      // 散弹枪：一次发3颗，有散布
+      for(let i=-1; i<=1; i++) {
+        const angle = player.aimAngle + i * 0.15;
+        const vx = Math.cos(angle)*12.5;
+        const vy = Math.sin(angle)*12.5;
+        bullets.push({ x: sx, y: sy, vx, vy, owner: 'me', bounces: 10 });
+        socket.emit('duel_shoot', { x: sx, y: sy, vx, vy });
+      }
+      player.fireCooldown = 0.3; // 射速慢
+    } else if (player.weapon === 'sniper') {
+      // 狙击枪：飞得快，伤害高
+      const vx = Math.cos(player.aimAngle)*31.25;
+      const vy = Math.sin(player.aimAngle)*31.25;
+      bullets.push({ x: sx, y: sy, vx, vy, owner: 'me', bounces: 10, damage: 30 });
+      socket.emit('duel_shoot', { x: sx, y: sy, vx, vy });
+      player.fireCooldown = 0.5;
+    } else {
+      // 默认手枪
+      const vx = Math.cos(player.aimAngle)*15;
+      const vy = Math.sin(player.aimAngle)*15;
+      bullets.push({ x: sx, y: sy, vx, vy, owner: 'me', bounces: 10, damage: 10 });
+      socket.emit('duel_shoot', { x: sx, y: sy, vx, vy });
+      player.fireCooldown = 0.1;
+    }
+  }
+
+  socket.emit('duel_sync', { x: player.x, y: player.y, aimAngle: player.aimAngle, hp: player.hp });
+
+  // --- 子弹物理 ---
+  bullets.forEach(b => {
+    b.x += b.vx; b.y += b.vy;
+    if (b.x < 0) { b.x = 0; b.vx *= -1; b.bounces--; }
+    if (b.x > W) { b.x = W; b.vx *= -1; b.bounces--; }
+    if (b.y < 0) { b.y = 0; b.vy *= -1; b.bounces--; }
+    
+    for (let p of allSolids) {
+      if (b.x > p.x - 4 && b.x < p.x + p.w + 4 && b.y > p.y - 4 && b.y < p.y + p.h + 4) {
+        const prevX = b.x - b.vx;
+        const prevY = b.y - b.vy;
+        let bounced = false;
+        if (prevX <= p.x || prevX >= p.x + p.w) { b.vx *= -1; bounced = true; }
+        if (prevY <= p.y || prevY >= p.y + p.h) { b.vy *= -1; bounced = true; }
+        if (bounced) {
+          b.bounces--;
+          if (prevX <= p.x) b.x = p.x - 5;
+          else if (prevX >= p.x + p.w) b.x = p.x + p.w + 5;
+          if (prevY <= p.y) b.y = p.y - 5;
+          else if (prevY >= p.y + p.h) b.y = p.y + p.h + 5;
+          break;
+        }
+      }
+    }
+
+    if (b.owner === 'me' && remotePlayer && b.bounces >= 0) {
+      if (Math.hypot(b.x - remotePlayer.x, b.y - (remotePlayer.y - PLAYER_H/2)) < 25) {
+        b.bounces = -1;
+        socket.emit('duel_hit', { targetId: remotePlayer.id, damage: 10 });
+        for(let k=0; k<5; k++) particles.push({ x: b.x, y: b.y, vx: (Math.random()-0.5)*6, vy: (Math.random()-0.5)*6, life: 20, color: '#FF4444' });
+      }
+    }
+  });
+  bullets = bullets.filter(b => b.bounces >= 0);
+
+  // 吃武器箱
+  obstacles.forEach(o => {
+    if (o.type === 'weapon' && Math.hypot(player.x - (o.x+15), (player.y - PLAYER_H/2) - (o.y+15)) < 40) {
+      // 随机获得散弹或狙击
+      player.weapon = Math.random() < 0.5 ? 'shotgun' : 'sniper';
+      o.type = 'gone';
+      document.getElementById('hud').innerText = '获得武器: ' + (player.weapon === 'shotgun' ? '散弹枪' : '狙击枪');
+    }
+  });
+
+  // 吃血包
+  obstacles.forEach(o => {
+    if (o.type === 'heal' && Math.hypot(player.x - (o.x+10), (player.y - PLAYER_H/2) - (o.y+10)) < 30) {
+      player.hp = Math.min(100, player.hp + 20);
+      o.type = 'gone';
+      for(let k=0; k<15; k++) particles.push({ x: player.x, y: player.y - PLAYER_H/2, vx: (Math.random()-0.5)*4, vy: (Math.random()-1)*4, life: 30, color: '#2ecc71' });
+    }
+  });
+  obstacles = obstacles.filter(o => o.type !== 'gone');
+
+  if (screenShake > 0) screenShake--;
+}
+
+function drawStickman(x, y, color, aimAngle, isMoving, animTime, hp) {
+  ctx.save(); 
+  ctx.translate(x, y);
+  ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+  const legLength = PLAYER_H * 0.18;
+  const bodyTop = -PLAYER_H * 0.8;
+  
+  let leftLegAngle = -8; let rightLegAngle = 8;
+  if (isMoving) { leftLegAngle = -8 + Math.sin(animTime) * 15; rightLegAngle = 8 - Math.sin(animTime) * 15; } 
+  else if (!player.isGrounded) { leftLegAngle = -15; rightLegAngle = 15; }
+
+  // 腿
+  ctx.beginPath(); ctx.moveTo(0, -legLength); ctx.lineTo(leftLegAngle, 0); ctx.moveTo(0, -legLength); ctx.lineTo(rightLegAngle, 0); ctx.stroke();
+  // 躯干
+  ctx.beginPath(); ctx.moveTo(0, -legLength); ctx.lineTo(0, bodyTop); ctx.stroke();
+  // 头
+  ctx.beginPath(); ctx.arc(0, bodyTop - 10, 9, 0, Math.PI*2); ctx.fillStyle = '#0a0a0a'; ctx.fill(); ctx.stroke();
+
+  // 枪与手臂
+  ctx.save(); ctx.translate(0, bodyTop + 5); ctx.rotate(aimAngle);
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(15, 0); ctx.stroke();
+  ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(15, 0); ctx.lineTo(28, 0); ctx.strokeStyle = '#fff'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(28, 0, 2, 0, Math.PI*2); ctx.fillStyle = '#fff'; ctx.fill();
+  ctx.restore();
+
+  // 后手
+  let backArmSwing = isMoving ? Math.sin(animTime) * 10 : 0;
+  const backArmX = Math.cos(aimAngle) * 20; const backArmY = Math.sin(aimAngle) * 20;
+  ctx.beginPath(); ctx.moveTo(0, bodyTop + 5); ctx.lineTo(backArmX, bodyTop + 5 + backArmY + 3 + backArmSwing); ctx.stroke();
+  
+  // 血条
+  ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(-20, -PLAYER_H - 40, 40, 6);
+  ctx.fillStyle = color === '#00FFFF' ? '#2ecc71' : '#e74c3c';
+  ctx.fillRect(-20, -PLAYER_H - 40, 40 * Math.max(0, hp) / 100, 6);
+
+  ctx.restore();
+}
+
+function draw() {
+  ctx.save();
+  if (screenShake > 0) ctx.translate((Math.random()-0.5)*screenShake, (Math.random()-0.5)*screenShake);
+
+  ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0, 0, W, H);
+  
+  platforms.forEach(p => { ctx.fillStyle = '#2a2a2a'; ctx.fillRect(p.x, p.y, p.w, p.h); ctx.fillStyle = '#444'; ctx.fillRect(p.x, p.y, p.w, 2); });
+  
+  obstacles.forEach(o => {
+    if (o.type === 'pillar') { ctx.fillStyle = '#555'; ctx.fillRect(o.x, o.y, o.w, o.h); ctx.strokeStyle = '#777'; ctx.strokeRect(o.x, o.y, o.w, o.h); } 
+    else if (o.type === 'box') {
+      ctx.fillStyle = '#8b5a2b'; ctx.fillRect(o.x, o.y, o.w, o.h);
+      ctx.strokeStyle = '#5c3a1a'; ctx.lineWidth = 2; ctx.strokeRect(o.x, o.y, o.w, o.h);
+      ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(o.x+o.w, o.y+o.h); ctx.moveTo(o.x+o.w, o.y); ctx.lineTo(o.x, o.y+o.h); ctx.stroke();
+    } else if (o.type === 'weapon') {
+      // 发光的紫色箱子
+      ctx.shadowColor = '#9b59b6'; ctx.shadowBlur = 10;
+      ctx.fillStyle = '#9b59b6'; ctx.fillRect(o.x, o.y, o.w, o.h);
+      ctx.fillStyle = '#fff'; ctx.font = '14px monospace'; ctx.fillText('W', o.x+10, o.y+20);
+      ctx.shadowBlur = 0;
+    } else if (o.type === 'heal') {
+      ctx.shadowColor = '#2ecc71'; ctx.shadowBlur = 10; ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.arc(o.x+10, o.y+10, 10, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.fillText('+', o.x+6, o.y+15); ctx.shadowBlur = 0;
+    }
+  });
+
+  bullets.forEach(b => { ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI*2); ctx.fillStyle = b.owner==='me'?'#00FFFF':'#FF4444'; ctx.fill(); });
+  particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life--; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 3, 3); });
+  particles = particles.filter(p => p.life > 0);
+
+  drawStickman(player.x, player.y, player.color, player.aimAngle, player.isMoving, player.animTime, player.hp);
+  
+  if (remotePlayer) {
+    const rmMoving = Math.abs(remotePlayer.x - (remotePlayer.lastX || remotePlayer.x)) > 1;
+    if (!remotePlayer.animTime) remotePlayer.animTime = 0;
+    if (rmMoving) remotePlayer.animTime += 0.2;
+    drawStickman(remotePlayer.x, remotePlayer.y, player.color === '#00FFFF' ? '#FF4444' : '#00FFFF', remotePlayer.aimAngle, rmMoving, remotePlayer.animTime, remotePlayer.hp);
+  }
+
+  if (!isMobile) { ctx.beginPath(); ctx.arc(mouseX, mouseY, 8, 0, Math.PI*2); ctx.strokeStyle = 'rgba(0,255,255,0.7)'; ctx.lineWidth=2; ctx.stroke(); }
+  ctx.restore();
+}
+
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+initMap();
+loop();
+</script>
+</body>
+</html>

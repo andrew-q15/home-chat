@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>📡 模拟声纳</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; touch-action: none; }
+  body { background: #000; overflow: hidden; height: 100vh; font-family: monospace; }
+  #canvas { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+  
+  .ui { position: absolute; top: 20px; left: 20px; background: rgba(0, 0, 0, 0.8); border: 1px solid #0f0; padding: 15px; border-radius: 8px; color: #0f0; z-index: 10; pointer-events: none; }
+  .ui h2 { margin-bottom: 10px; font-size: 16px; }
+  .ui p { font-size: 13px; margin-bottom: 5px; }
+  
+  .controls { position: absolute; bottom: 20px; left: 20px; display: flex; gap: 10px; z-index: 10; }
+  button { background: #000; color: #0f0; border: 1px solid #0f0; padding: 8px 16px; font-family: monospace; font-size: 14px; cursor: pointer; }
+  button:active { background: #0f0; color: #000; }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<div class="ui">
+  <h2>📡 模拟声纳</h2>
+  <p>操作: 按住左键画墙 / 点击右键发声纳</p>
+  <p>状态: <span id="status">准备就绪</span></p>
+</div>
+
+<div class="controls">
+  <button onclick="clearAll()">清空</button>
+</div>
+
+<script>
+const token = localStorage.getItem('token');
+if (!token) location.href = '/';
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  draw(); 
+}
+window.addEventListener('resize', resize);
+
+let strokes = [];
+let currentStroke = null;
+let sonarPos = null;
+let sonarHits = null;
+
+canvas.addEventListener('contextmenu', e => e.preventDefault()); 
+
+canvas.addEventListener('mousedown', (e) => {
+  const x = e.clientX;
+  const y = e.clientY;
+  
+  if (e.button === 0) {
+    currentStroke = [{x, y}];
+    strokes.push(currentStroke);
+    draw();
+  } else if (e.button === 2) {
+    sonarPos = {x, y};
+    document.getElementById('status').textContent = '声纳计算中...';
+    startScan(x, y);
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (currentStroke) {
+    currentStroke.push({ x: e.clientX, y: e.clientY });
+    draw(); 
+  }
+});
+
+window.addEventListener('mouseup', () => {
+  currentStroke = null;
+});
+
+function draw() {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  // 画墙壁（亮青色，5px粗，带发光）
+  if (strokes.length > 0) {
+    ctx.strokeStyle = '#00ffff';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.shadowColor = '#00ffff';
+    ctx.shadowBlur = 10;
+    
+    for (const s of strokes) {
+      if (s.length < 2) continue;
+      ctx.beginPath();
+      ctx.moveTo(s[0].x, s[0].y);
+      for (let i = 1; i < s.length; i++) {
+        ctx.lineTo(s[i].x, s[i].y);
+      }
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+  }
+
+  // 画声纳轨迹和落点
+  if (sonarPos && sonarHits) {
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(sonarPos.x, sonarPos.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(0, 255, 0, 0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = '#00ff00';
+    ctx.shadowBlur = 5;
+    
+    for (const h of sonarHits) {
+      const path = h.path;
+      if (!path || path.length < 2) continue;
+      
+      ctx.beginPath();
+      ctx.moveTo(path[0].x, path[0].y);
+      for (let i = 1; i < path.length; i++) {
+        ctx.lineTo(path[i].x, path[i].y);
+        
+        if (i > 0) {
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.arc(path[i].x, path[i].y, 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+  }
+}
+
+async function startScan(x, y) {
+  if (strokes.length === 0) {
+    document.getElementById('status').textContent = '请先画房间！';
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/sonar/scan', {
+      method: 'POST',
+      headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ x, y, rays: 120 }) // 发120条射线防止卡死
+    });
+    const data = await res.json();
+    
+    if (data.ok) {
+      sonarHits = data.hits;
+      document.getElementById('status').textContent = '探测完成';
+      draw(); 
+    } else {
+      document.getElementById('status').textContent = data.msg || '错误';
+    }
+  } catch (e) {
+    document.getElementById('status').textContent = '网络错误';
+  }
+}
+
+function clearAll() {
+  strokes = [];
+  sonarHits = null;
+  sonarPos = null;
+  document.getElementById('status').textContent = '准备就绪';
+  draw();
+}
+
+resize();
+</script>
+</body>
+</html>

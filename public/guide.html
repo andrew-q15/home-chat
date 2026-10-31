@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>📖 刚进的人必看</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px 14px 40px;
+    background: linear-gradient(160deg, #1a0a0a 0%, #3a1010 50%, #1a0a0a 100%);
+    color: #eee; font-family: -apple-system, "PingFang SC", sans-serif;
+    min-height: 100vh; line-height: 1.7;
+  }
+  .top-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    background: rgba(0,0,0,.55); padding: 12px 16px; border-radius: 10px;
+    margin-bottom: 18px;
+  }
+  .top-bar h1 { margin: 0; font-size: 19px; color: #ffd700; }
+  .top-bar a { color: #ffd700; text-decoration: none; font-size: 14px; }
+  .card {
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,215,0,.25);
+    border-radius: 12px; padding: 16px 18px; margin-bottom: 16px;
+  }
+  .card h2 {
+    margin: 0 0 12px; font-size: 16px; color: #ffd700;
+    border-bottom: 1px solid rgba(255,215,0,.2); padding-bottom: 8px;
+  }
+  .card p { margin: 8px 0; font-size: 14px; color: #ddd; }
+  .card ul { margin: 8px 0; padding-left: 22px; font-size: 14px; color: #ddd; }
+  .card li { margin: 6px 0; }
+  .card b { color: #ffd700; }
+  .card .warn { color: #ff8a80; }
+  .card .ok { color: #69f0ae; }
+  .tag {
+    display: inline-block; padding: 1px 8px; border-radius: 10px;
+    font-size: 12px; margin-right: 4px;
+  }
+  .tag.red { background: rgba(255,82,82,.2); color: #ff8a80; }
+  .tag.green { background: rgba(105,240,174,.15); color: #69f0ae; }
+  .tag.gold { background: rgba(255,215,0,.15); color: #ffd700; }
+  .back {
+    display: block; text-align: center; margin-top: 24px;
+    padding: 12px; background: transparent; color: #ffd700;
+    border: 1px solid #ffd700; border-radius: 8px; text-decoration: none; font-size: 15px;
+  }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1>📖 刚进的人必看</h1>
+  <a href="/">← 返回聊天室</a>
+</div>
+
+<div class="card">
+  <h2>🍊 橘子是什么</h2>
+  <p>橘子（🍊）是这里的虚拟货币，用来玩各种功能。</p>
+  <ul>
+    <li><b>汇率</b>：1000 🍊 = 1 元（口头约定）</li>
+    <li><b>怎么加橘子</b>：当面给程序猿猴现金，程序猿猴手动给你加</li>
+    <li><b>上限</b>：单人最多 100 万 🍊（= 1000 元）</li>
+    <li><b>新用户</b>：默认 0 🍊，要找程序猿猴要</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>💰 橘子怎么赚</h2>
+  <ul>
+    <li><span class="tag gold">发情报</span> 在 📌 情报局 发情报，AI 评分 0–10，有效情报有奖励</li>
+    <li><span class="tag gold">抢红包</span> 聊天室里有人发红包，点开抢</li>
+    <li><span class="tag gold">卖食材</span> 把食材卖给系统换橘子</li>
+    <li><span class="tag gold">故事评分</span> 发故事，AI 打分换橘子</li>
+    <li><span class="tag gold">情报局 30 天奖励</span> 连续 30 天达标，+5000 🍊</li>
+    <li><span class="tag gold">被打赏</span> 别人给你的消息打赏</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>🛒 橘子怎么花</h2>
+  <ul>
+    <li><span class="tag red">跑龙虾</span> 让 AI 帮你干活，100 token = 1 🍊（可欠账）</li>
+    <li><span class="tag red">买食材</span> 跳蚤市场买别人卖的食材</li>
+    <li><span class="tag red">进 3D 峡谷</span> 100 🍊 一次，抽 1 个食材（生姜再扣 10）</li>
+    <li><span class="tag red">买皮肤</span> 橘子商店：霓虹 200 / 彩虹 500 / 土豪金 1000</li>
+    <li><span class="tag red">发红包</span> 给聊天室的人发红包</li>
+    <li><span class="tag red">打赏</span> 给喜欢的消息打赏橘子</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>⚠️ 欠账规则（重要）</h2>
+  <p>余额 <b>小于 0</b> 就是欠账。欠账期间：</p>
+  <ul>
+    <li class="warn">❌ 不能买食材、买皮肤、跑龙虾、进峡谷、发红包、打赏、卖食材</li>
+    <li class="ok">✅ 还能发情报（这是还债的主要途径）</li>
+    <li class="ok">✅ 还能抢红包（收入不受限）</li>
+  </ul>
+  <p>怎么还债：<b>发有效情报</b>（AI &gt; 3 分）、抢红包、等别人打赏，余额回到 ≥0 自动解锁。</p>
+  <p class="warn">欠账期发灌水情报（AI ≤3 分），每条额外扣 1 🍊。</p>
+</div>
+
+<div class="card">
+  <h2>📌 情报局规则</h2>
+  <ul>
+    <li><b>加入</b>：点情报局页面的"加入情报局"，无门槛</li>
+    <li><b>每日 KPI</b>：前 7 天每天 <b>5 条</b>，第 8 天起每天 <b>10 条</b></li>
+    <li><b>有效判定</b>：AI 评分 <b>&gt; 3</b>（≥4）才算有效</li>
+    <li><b>没达标</b>：结算时扣 <b>10 🍊</b>，连续天数归零</li>
+    <li><b>30 天连续</b>：奖励 <b>5000 🍊</b>，之后每再满 30 天再发一次</li>
+    <li><b>冷却</b>：发情报有 5 分钟冷却</li>
+    <li><b>退出</b>：有退出按钮，退出后连续天数清零，欠账保留要还</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>🦞 龙虾怎么用</h2>
+  <p>龙虾是一个 AI 代码助手，能让它帮你写代码、跑命令、做小工具。</p>
+  <ul>
+    <li>计费：<b>100 token = 1 🍊</b>，不足 100 也按 1 🍊 起</li>
+    <li>余额不够也能跑，会欠账（无利息）</li>
+    <li>联网请求需要你点"同意"才放行</li>
+    <li>任务在沙箱目录里跑，不会碰你电脑其他文件</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>🎮 操作方法</h2>
+  <ul>
+    <li><b>发红包</b>：聊天框输入框旁边有红包按钮，填总额和个数</li>
+    <li><b>投票</b>：输入框旁边有投票按钮，填问题和选项</li>
+    <li><b>骰子</b>：骰子按钮，选面数（2–1000）</li>
+    <li><b>共享白板</b>：侧栏"共享白板"，可以画画，撤销/重做，投票清空</li>
+    <li><b>改名/头像</b>：点自己的头像或名字</li>
+    <li><b>@ai</b>：在消息里打 <b>@ai</b>，AI 会回你</li>
+    <li><b>私聊</b>：点用户名 → 私聊</li>
+    <li><b>拉黑</b>：聊天框输入 <b>/block 用户名</b></li>
+    <li><b>查余额</b>：聊天框输入 <b>/myoranges</b></li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>❓ 常见问题</h2>
+  <ul>
+    <li><b>欠账了怎么办？</b> 发有效情报、抢红包、等打赏，余额回 ≥0 自动解锁</li>
+    <li><b>怎么加橘子？</b> 当面给程序猿猴现金，程序猿猴手动加</li>
+    <li><b>怎么退出情报局？</b> 情报局页面 KPI 卡片下有"退出情报局"按钮</li>
+    <li><b>情报冷却多久？</b> 5 分钟</li>
+    <li><b>数据会丢吗？</b> 每天 3:00 自动备份 data.json，留 30 份</li>
+  </ul>
+</div>
+
+<a class="back" href="/">← 返回聊天室</a>
+
+</body>
+</html>

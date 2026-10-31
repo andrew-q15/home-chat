@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>🔮 每日运势</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:radial-gradient(circle at 50% 30%,#4a148c,#1a0033,#000);color:#f3e5f5;font-family:-apple-system,"PingFang SC",sans-serif;min-height:100vh;padding:20px;display:flex;flex-direction:column;align-items:center}
+.header{width:100%;max-width:480px;display:flex;justify-content:space-between;margin-bottom:20px}
+.header h1{color:#ce93d8;font-size:22px}
+.header a{color:#ba68c8;text-decoration:none;font-size:14px}
+.card{max-width:480px;width:100%;background:rgba(74,20,140,.4);border:2px solid #ab47bc;border-radius:20px;padding:40px 24px;text-align:center;box-shadow:0 0 40px rgba(171,71,188,.4)}
+.icon{font-size:100px;margin-bottom:20px;animation:spin 4s linear infinite}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+.fortune{font-size:20px;line-height:1.8;color:#fff;min-height:80px;margin-bottom:24px}
+.btn{padding:12px 32px;border:none;border-radius:30px;background:linear-gradient(135deg,#ab47bc,#7b1fa2);color:#fff;font-size:16px;font-weight:700;cursor:pointer}
+.btn:active{transform:scale(.97)}
+</style></head><body>
+<div class="header"><h1>🔮 每日运势</h1><a href="/">← 返回</a></div>
+<div class="card">
+<div class="icon">🔮</div>
+<div class="fortune" id="fortune">点击下方按钮，看看今日运势</div>
+<button class="btn" onclick="__load()">🔮 测今日运势</button>
+</div>
+<script>
+const token=localStorage.getItem('token');if(!token)location.href='/';
+window.__load=async function(){const el=document.getElementById('fortune');el.textContent='AI 算命先生正在掐指...';try{const d=await fetch('/api/fortune/today',{headers:{Authorization:token}}).then(r=>r.json());el.textContent=d.fortune||'今日宜摸鱼，忌刷题。';}catch(e){el.textContent='网络错误';}};
+</script></body></html>

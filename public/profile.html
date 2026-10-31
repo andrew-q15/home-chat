@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>👤 个人主页</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: linear-gradient(160deg, #0f172a, #1e293b); color: #e2e8f0; font-family: -apple-system, "PingFang SC", sans-serif; min-height: 100vh; padding: 20px; }
+  .header { max-width: 560px; margin: 0 auto 20px; display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { color: #38bdf8; font-size: 20px; }
+  .header a { color: #94a3b8; text-decoration: none; font-size: 14px; }
+  .card { max-width: 560px; margin: 0 auto; background: #1e293b; border: 1px solid #334155; border-radius: 18px; padding: 28px 24px; box-shadow: 0 8px 32px rgba(0,0,0,.3); }
+  .top { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+  .avatar { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; background: #334155; }
+  .info { flex: 1; }
+  .name { font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px; }
+  .title-badge { display: inline-block; padding: 2px 8px; background: #ffd54f; color: #000; border-radius: 6px; font-size: 12px; font-weight: 700; margin-left: 6px; }
+  .tier { font-size: 14px; color: #ffd54f; margin-top: 6px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 12px; text-align: center; }
+  .stat .v { font-size: 20px; font-weight: 800; color: #ffd54f; }
+  .stat .l { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+  .section-title { font-size: 14px; color: #94a3b8; margin: 20px 0 10px; border-bottom: 1px solid #334155; padding-bottom: 6px; }
+  .ach-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 14px; }
+  .ach-row .emoji { font-size: 22px; }
+  .ach-row .name { flex: 1; color: #fff; }
+  .ach-row .lv { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 700; }
+  #toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #38bdf8; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #38bdf8; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="header"><h1>👤 个人主页</h1><a href="/">← 返回聊天室</a></div>
+<div class="card" id="card">加载中...</div>
+<div id="toast"></div>
+<script>
+const token = localStorage.getItem('token');
+if (!token) location.href = '/';
+const urlName = new URLSearchParams(location.search).get('u');
+function toast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500); }
+async function load() {
+  const endpoint = urlName ? '/api/profile/' + encodeURIComponent(urlName) : '/api/profile/me';
+  try {
+    const d = await fetch(endpoint, { headers: { Authorization: token } }).then(r => r.json());
+    if (!d.ok) { document.getElementById('card').innerHTML = '<div style="text-align:center;color:#94a3b8;padding:40px">' + (d.msg || '加载失败') + '</div>'; return; }
+    const p = d.profile;
+    const avatar = p.avatar ? '<img class="avatar" src="' + p.avatar + '">' : '<div class="avatar"></div>';
+    const title = p.title ? '<span class="title-badge">' + p.title + '</span>' : '';
+    document.getElementById('card').innerHTML = `
+      <div class="top">${avatar}<div class="info"><div class="name">${p.displayName}${title}</div><div class="tier">${p.tier.emoji} ${p.tier.name}段位</div></div></div>
+      <div class="stats">
+        <div class="stat"><div class="v">${p.oranges}</div><div class="l">橘子余额</div></div>
+        <div class="stat"><div class="v">${p.totalSpent}</div><div class="l">累计消耗</div></div>
+        <div class="stat"><div class="v">${p.checkInStreak}</div><div class="l">连续签到</div></div>
+        <div class="stat"><div class="v">${p.lobsterTaskCount}</div><div class="l">龙虾任务</div></div>
+        <div class="stat"><div class="v">${p.uploadCount}</div><div class="l">上传次数</div></div>
+        <div class="stat"><div class="v">${(p.stats && p.stats.achievementCount) || 0}</div><div class="l">成就解锁</div></div>
+        <div class="stat"><div class="v">${(p.stats && p.stats.maxedCount) || 0}</div><div class="l">满级成就</div></div>
+        <div class="stat"><div class="v">${(p.stats && p.stats.quizWins) || 0}</div><div class="l">答题答对</div></div>
+        <div class="stat"><div class="v">${(p.stats && p.stats.novelCount) || 0}</div><div class="l">发布作品</div></div>
+      </div>
+      <div class="section-title">🏆 成就概览</div>
+      <div style="text-align:center;color:#64748b;padding:20px;font-size:13px">成就详细情况去 <a href="/achievements.html" style="color:#38bdf8">🏆 橘子成就馆</a> 看</div>
+    `;
+  } catch (e) { toast('网络错误'); }
+}
+load();
+</script>
+</body>
+</html>

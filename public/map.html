@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🗺️ 赛博足迹矩阵</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background-color: #f8f9fa; font-family: ui-monospace, Menlo, Consolas, monospace; overflow: hidden; height: 100vh; color: #333; user-select: none; -webkit-user-select: none; }
+  
+  #map-canvas { position: absolute; inset: 0; z-index: 1; display: block; cursor: grab; touch-action: none; }
+  #map-canvas:active { cursor: grabbing; }
+
+  /* 准星死锁在正中心 */
+  #crosshair {
+    position: fixed; top: 50%; left: 50%;
+    width: 24px; height: 24px; z-index: 10; pointer-events: none;
+    transform: translate(-50%, -50%);
+  }
+  #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #3498db; }
+  #crosshair::before { top: 11px; left: 0; width: 24px; height: 2px; }
+  #crosshair::after { top: 0; left: 11px; width: 2px; height: 24px; }
+
+  .top-bar { position: fixed; top: 16px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: flex-start; pointer-events: none; z-index: 1000; }
+  .top-bar a { pointer-events: auto; background: #fff; color: #333; padding: 10px 16px; border-radius: 4px; text-decoration: none; font-weight: bold; font-size: 14px; border: 1px solid #ccc; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+  
+  .panel { pointer-events: auto; background: #fff; border: 1px solid #ccc; padding: 16px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 260px; }
+  .panel h3 { font-size: 15px; margin-bottom: 12px; color: #2ecc71; border-bottom: 1px dashed #2ecc71; padding-bottom: 6px; display: inline-block; }
+  .form-group button { width: 100%; padding: 12px; border: 1px solid #333; background: #fff; color: #333; border-radius: 4px; font-weight: bold; cursor: pointer; margin-bottom: 8px; font-size: 14px; transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  
+  .btn-track { color: #e74c3c !important; border-color: #e74c3c !important; }
+  .btn-track.active { background: #e74c3c !important; color: #fff !important; animation: pulse 2s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); } 100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); } }
+  
+  .info { font-size: 12px; color: #666; margin-top: 10px; line-height: 1.5; border-top: 1px dotted #ccc; padding-top: 10px; }
+</style>
+</head>
+<body>
+
+<canvas id="map-canvas"></canvas>
+<div id="crosshair"></div>
+
+<div class="top-bar">
+  <a href="/">← 返回聊天室</a>
+  <div class="panel">
+    <h3>Data Collector</h3>
+    <div class="form-group">
+      <button class="btn-track" id="btn-track" onclick="__toggleTracking()">
+        ▶ 开启自动地图数据收集
+      </button>
+      <button onclick="__locateMe()">📍 获取GPS重新定位</button>
+      <button onclick="__addMarkerPrompt()">📌 在准星处创建标记</button>
+    </div>
+    <div class="info" id="info">
+      地图已就绪。<br>
+      - 拖拽画布移动<br>
+      - 滚轮/双指缩放
+    </div>
+  </div>
+</div>
+
+<script>
+let myToken = localStorage.getItem('token');
+const canvas = document.getElementById('map-canvas');
+const ctx = canvas.getContext('2d');
+
+let W = canvas.width = window.innerWidth;
+let H = canvas.height = window.innerHeight;
+
+window.addEventListener('resize', () => {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  draw();
+});
+
+// 核心：建立 世界(米) -> 屏幕(像素) 的平移坐标系
+// 这样拖拽和缩放绝对不会乱
+let offsetX = 0; // 世界的原点在屏幕的哪个像素X
+let offsetY = 0; // 世界的原点在屏幕的哪个像素Y
+let zoom = 1;    // 缩放级别
+
+// 当前准星（屏幕中心）对应的真实地理坐标，仅用于记录
+let centerLat = 34.34;
+let centerLng = 108.94;
+
+let footprints = [];
+let myLiveTrack = [];
+let isTracking = false;
+let watchId = null;
+let isFirstTrackPoint = true;
+
+// 转换公式：真实的经纬度 -> 虚拟的平面世界坐标(米) -> 屏幕坐标(像素)
+// 我们约定：1 度纬度 = 111000 米，1 度经度在当前纬度下 = 111000 * cos(lat) 米
+function latLngToPixel(lat, lng) {
+  const R = 111000;
+  const cosLat = Math.cos(centerLat * Math.PI / 180);
+  // 计算相对于当前中心的偏移（米）
+  const dxMeters = (lng - centerLng) * R * cosLat;
+  const dyMeters = (lat - centerLat) * R;
+  
+  // 1米 = 多少像素？(基准比例)
+  const pxPerMeter = 0.1; 
+  const pxPerDegree = R * pxPerMeter * zoom;
+
+  return {
+    x: W / 2 + (lng - centerLng) * pxPerDegree * cosLat,
+    y: H / 2 - (lat - centerLat) * pxPerDegree
+  };
+}
+
+// 渲染
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // 1. 画无限网格（绝对跟手版）
+  // 计算当前的物理距离转换率
+  const R = 111000;
+  const cosLat = Math.cos(centerLat * Math.PI / 180);
+  const pxPerDegree = R * 0.1 * zoom;
+  
+  // 网格的大小（单位：经纬度度数）
+  // 我们希望屏幕上大概是 40 像素画一个格子
+  let gridDegreeX = 40 / (pxPerDegree * cosLat);
+  let gridDegreeY = 40 / pxPerDegree;
+
+  // 因为经纬度是不规则数值，我们取一个好看的基准步长
+  // 比如 0.0001 度、0.001 度这种
+  const baseStep = 0.0001;
+  const stepX = Math.max(baseStep, Math.round(gridDegreeX / baseStep) * baseStep);
+  const stepY = Math.max(baseStep, Math.round(gridDegreeY / baseStep) * baseStep);
+
+  // 计算当前视野左上角对应的经纬度
+  const topLeftLng = centerLng - (W / 2) / (pxPerDegree * cosLat);
+  const topLeftLat = centerLat + (H / 2) / pxPerDegree;
+
+  ctx.beginPath();
+  ctx.strokeStyle = '#e0e0e0';
+  ctx.lineWidth = 1;
+
+  // 画竖线 (经度)
+  const startLng = Math.floor(topLeftLng / stepX) * stepX;
+  for (let lng = startLng; lng < topLeftLng + W / (pxPerDegree * cosLat); lng += stepX) {
+    const x = W / 2 + (lng - centerLng) * pxPerDegree * cosLat;
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, H);
+  }
+
+  // 画横线 (纬度)
+  const startLat = Math.floor(topLeftLat / stepY) * stepY;
+  for (let lat = startLat; lat > topLeftLat - H / pxPerDegree; lat -= stepY) {
+    const y = H / 2 - (lat - centerLat) * pxPerDegree;
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+  }
+  ctx.stroke();
+
+  // 2. 画历史足迹
+  footprints.forEach(fp => {
+    const p = latLngToPixel(fp.lat, fp.lng);
+    ctx.beginPath();
+    ctx.fillStyle = 'rgba(46, 204, 64, 0.2)';
+    ctx.arc(p.x, p.y, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.fillStyle = '#2ecc71';
+    ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // 3. 画实时轨迹
+  if (myLiveTrack.length > 0) {
+    ctx.beginPath();
+    ctx.strokeStyle = '#3498db';
+    ctx.lineWidth = 3;
+    myLiveTrack.forEach((pt, i) => {
+      const p = latLngToPixel(pt.lat, pt.lng);
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    });
+    ctx.stroke();
+    
+    // 画最新的一点
+    const last = myLiveTrack[myLiveTrack.length - 1];
+    const pLast = latLngToPixel(last.lat, last.lng);
+    ctx.beginPath();
+    ctx.fillStyle = '#3498db';
+    ctx.arc(pLast.x, pLast.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// ================= 拖拽 =================
+let isDragging = false;
+let lastX, lastY;
+
+canvas.addEventListener('pointerdown', e => {
+  isDragging = true;
+  lastX = e.clientX;
+  lastY = e.clientY;
+  canvas.setPointerCapture(e.pointerId);
+});
+
+canvas.addEventListener('pointermove', e => {
+  if (!isDragging) return;
+  const dx = e.clientX - lastX;
+  const dy = e.clientY - lastY;
+  
+  // 核心修复：拖拽时直接修改中心经纬度
+  // 鼠标往右拖(dx>0)，地图要往右走，说明中心点往左移(经度减小)
+  const R = 111000;
+  const cosLat = Math.cos(centerLat * Math.PI / 180);
+  const pxPerDegree = R * 0.1 * zoom;
+  
+  // 经度变化：dx(像素) / pxPerDegree(像素/度)
+  centerLng -= dx / (pxPerDegree * cosLat);
+  // 纬度变化：鼠标往下拖(dy>0)，地图往下走，中心点往上移(纬度增加)
+  centerLat += dy / pxPerDegree;
+  
+  lastX = e.clientX;
+  lastY = e.clientY;
+  draw();
+});
+
+canvas.addEventListener('pointerup', e => {
+  isDragging = false;
+  canvas.releasePointerCapture(e.pointerId);
+});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (e.deltaY < 0) zoom *= 1.2;
+  else zoom /= 1.2;
+  draw();
+}, { passive: false });
+
+// ================= 业务功能 =================
+function getDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng/2) * Math.sin(dLng/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function __toggleTracking() {
+  const btn = document.getElementById('btn-track');
+  const info = document.getElementById('info');
+
+  if (isTracking) {
+    if (watchId) navigator.geolocation.clearWatch(watchId);
+    isTracking = false;
+    btn.classList.remove('active');
+    btn.innerHTML = '▶ 开启自动地图数据收集';
+    info.innerHTML = `状态: 已停止<br>收集点数: ${myLiveTrack.length}`;
+  } else {
+    if (!navigator.geolocation) return alert('此设备不支持定位');
+    
+    isTracking = true;
+    btn.classList.add('active');
+    btn.innerHTML = '⏹ 停止收集 (正在记录)';
+    myLiveTrack = [];
+    isFirstTrackPoint = true;
+    
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        
+        if (myLiveTrack.length > 0) {
+          const last = myLiveTrack[myLiveTrack.length - 1];
+          if (getDistance(last.lat, last.lng, lat, lng) < 5) return;
+        }
+
+        myLiveTrack.push({ lat, lng });
+        
+        if (isFirstTrackPoint) {
+          centerLat = lat;
+          centerLng = lng;
+          isFirstTrackPoint = false;
+        }
+        draw();
+
+        let totalDist = 0;
+        for (let i = 1; i < myLiveTrack.length; i++) {
+          totalDist += getDistance(myLiveTrack[i-1].lat, myLiveTrack[i-1].lng, myLiveTrack[i].lat, myLiveTrack[i].lng);
+        }
+        info.innerHTML = `状态: <span style="color:#e74c3c;">正在收集</span><br>收集点数: ${myLiveTrack.length}<br>移动距离: ${totalDist.toFixed(1)} 米`;
+
+        if (myLiveTrack.length % 10 === 0) {
+          fetch('/api/map/footprint', {
+            method: 'POST', headers: { 'Authorization': myToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lat, lng })
+          });
+        }
+      },
+      (err) => {
+        info.innerHTML = `状态: <span style="color:red;">定位失败</span><br>需HTTPS或允许权限。`;
+      },
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
+    );
+  }
+}
+
+function __locateMe() {
+  if (!navigator.geolocation) return alert('不支持定位');
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      centerLat = pos.coords.latitude;
+      centerLng = pos.coords.longitude;
+      zoom = 1; 
+      draw();
+      document.getElementById('info').innerHTML = `定位成功。<br>准星已居中。`;
+    },
+    (err) => alert('定位失败(需HTTPS)。')
+  );
+}
+
+function __addMarkerPrompt() {
+  const title = prompt('给准星处的坐标起个名字:');
+  if (!title) return;
+  const note = prompt('备注 (可留空)') || '';
+  
+  fetch('/api/map/markers', {
+    method: 'POST', headers: { 'Authorization': myToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lat: centerLat, lng: centerLng, title, note, type: 'custom' })
+  }).then(r=>r.json()).then(d => {
+    if (d.ok) loadData();
+    else alert(d.msg);
+  });
+}
+
+function loadData() {
+  fetch('/api/map/data', { headers: { 'Authorization': myToken } })
+    .then(r=>r.json()).then(d => {
+      if (!d.ok) return;
+      footprints = d.footprints;
+      draw();
+    });
+}
+
+draw();
+loadData();
+
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('autotrack') === '1') {
+  setTimeout(() => { __toggleTracking(); }, 1000);
+}
+</script>
+</body>
+</html>

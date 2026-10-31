@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🦞 龙虾任务</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; font-family: system-ui, sans-serif; min-height: 100vh;
+    background: linear-gradient(160deg, #7f2d00, #b34700);
+    color: #fff; display: flex; flex-direction: column; align-items: center;
+    padding: 24px 16px;
+  }
+  .card {
+    background: rgba(0,0,0,0.35); border-radius: 16px;
+    padding: 24px 20px; max-width: 560px; width: 100%;
+  }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  .sub { color: #ffd9b3; font-size: 13px; margin-bottom: 16px; }
+  .balance { font-size: 15px; margin-bottom: 16px; }
+  .balance b { color: #ffd54f; font-size: 20px; }
+  textarea {
+    width: 100%; height: 90px; padding: 10px; border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3);
+    color: #fff; font-size: 14px; resize: vertical; outline: none;
+  }
+  textarea:focus { border-color: #ffd54f; }
+  .row { display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+  button {
+    padding: 10px 22px; border: none; border-radius: 8px;
+    background: #ffd54f; color: #5d2b00; font-size: 14px;
+    font-weight: 600; cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .hint { color: #ffd9b3; font-size: 12px; }
+  #log {
+    margin-top: 16px; background: rgba(0,0,0,0.45); border-radius: 8px;
+    padding: 10px 12px; max-height: 260px; overflow-y: auto;
+    font-family: monospace; font-size: 12px; line-height: 1.6;
+    white-space: pre-wrap; word-break: break-all; display: none;
+    color: #cfe8ff;
+  }
+  #log .lg-tool { color: #8fd3ff; }
+  #log .lg-res { color: #9fd8a8; }
+  #log .lg-err { color: #ff9f8a; }
+  #result {
+    display: none; margin-top: 16px;
+    background: rgba(255,255,255,0.96); color: #333;
+    border-radius: 10px; padding: 14px 16px;
+    font-size: 14px; line-height: 1.7; white-space: pre-wrap;
+    word-break: break-word;
+  }
+  #result .r-title {
+    font-size: 13px; font-weight: 700; color: #b34700;
+    margin-bottom: 8px; display: block;
+  }
+  #history { margin-top: 16px; }
+  #history h3 { font-size: 14px; margin: 0 0 8px; color: #ffd9b3; }
+  #history .h-item {
+    background: rgba(0,0,0,0.3); border-radius: 8px; padding: 8px 10px;
+    margin-bottom: 6px; font-size: 12px;
+  }
+  #history .h-item .h-task { color: #fff; }
+  #history .h-item .h-meta { color: #ffd9b3; margin-top: 2px; }
+  .back { margin-top: 20px; }
+  .back a { color: #ffd54f; text-decoration: none; font-size: 14px; }
+  .admin-box { margin-top: 16px; display: none; }
+  .admin-box.open { display: block; }
+  .admin-box input {
+    padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3);
+    background: rgba(0,0,0,0.3); color: #fff; font-size: 13px; width: 110px;
+  }
+  #status { font-size: 13px; color: #ffd54f; min-height: 18px; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>🦞 龙虾任务</h1>
+  <div class="sub">花橘子（🍊）让 AI 助手帮你干活 · 100 token = 1 🍊（约 1/1000 元）· 命令在沙箱中运行</div>
+  <div class="balance">余额：<b id="bal">--</b> 🍊　<span class="hint" id="spent"></span></div>
+
+  <textarea id="task" placeholder="描述任务，例如：帮我写一个倒计时网页" maxlength="500"></textarea>
+  <div class="row">
+    <button id="run-btn">🚀 开始</button>
+    <span class="hint" id="pos"></span>
+  </div>
+  <div id="status"></div>
+  <div id="result"></div>
+  <div id="log"></div>
+
+  <div id="approve-box" style="display:none;margin-top:12px;background:rgba(255,213,79,0.15);border:1px solid #ffd54f;border-radius:8px;padding:12px">
+    <div style="font-size:14px;font-weight:600;margin-bottom:6px">🌐 AI 想要访问网络</div>
+    <div style="font-size:12px;color:#ffd9b3;margin-bottom:4px">目标：</div>
+    <div id="approve-cmd" style="font-family:monospace;font-size:12px;background:rgba(0,0,0,0.4);padding:8px;border-radius:6px;word-break:break-all"></div>
+    <div style="margin-top:10px;display:flex;gap:8px">
+      <button id="approve-yes" style="background:#2ecc71;color:#fff">同意本次任务联网</button>
+      <button id="approve-no" style="background:#eee;color:#555">拒绝</button>
+    </div>
+  </div>
+
+  <div class="admin-box" id="admin-box">
+    <h3 style="font-size:14px;margin:0 0 8px">🛠 超管面板</h3>
+    <div class="row" style="margin-top:0">
+      <input id="adm-user" placeholder="用户名">
+      <input id="adm-num" type="number" placeholder="数量">
+      <button id="adm-add">加橘子</button>
+      <button id="adm-set" style="background:#eee">设为</button>
+    </div>
+    <div id="adm-list" style="font-size:12px;margin-top:8px;color:#ffd9b3"></div>
+  </div>
+
+  <div id="history">
+    <h3>📜 我的最近任务</h3>
+    <div id="history-list" class="hint">加载中...</div>
+  </div>
+
+  <div class="back"><a href="/">← 返回聊天室</a></div>
+</div>
+
+<script>
+(function() {
+  var token = localStorage.getItem('token');
+  var statusEl = document.getElementById('status');
+  var logEl = document.getElementById('log');
+  var resultEl = document.getElementById('result');
+  var runBtn = document.getElementById('run-btn');
+  var es = null;
+
+  function showResult(text) {
+    if (!text) return;
+    resultEl.innerHTML = '<span class="r-title">📋 结果</span>';
+    resultEl.appendChild(document.createTextNode(String(text)));
+    resultEl.style.display = 'block';
+  }
+
+  function setStatus(t) { statusEl.textContent = t; }
+  function log(t) {
+    logEl.style.display = 'block';
+    logEl.textContent += t + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function fmtTime(ts) {
+    var d = new Date(ts);
+    return (d.getMonth() + 1) + '/' + d.getDate() + ' ' +
+      ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  }
+
+  async function loadBalance() {
+    try {
+      var res = await fetch('/api/lobster/balance', { headers: { 'Authorization': token } });
+      var data = await res.json();
+      if (data.ok) {
+        var balEl = document.getElementById('bal');
+        if (data.oranges < 0) {
+          balEl.textContent = '欠 ' + Math.abs(data.oranges);
+          balEl.style.color = '#ff8a80';
+          document.getElementById('spent').textContent = '欠款无利息，跑任务或找超管销账 · 累计消耗 ' + data.totalSpent;
+        } else {
+          balEl.textContent = data.oranges;
+          balEl.style.color = '';
+          document.getElementById('spent').textContent = '累计消耗 ' + data.totalSpent;
+        }
+      } else if (res.status === 401) {
+        localStorage.removeItem('token');
+        setStatus('登录已失效（服务器重启过或换了登录地址），请回聊天室重新登录');
+        runBtn.disabled = true;
+      }
+    } catch (e) { setStatus('网络错误'); }
+  }
+
+  async function loadHistory() {
+    try {
+      var res = await fetch('/api/lobster/history', { headers: { 'Authorization': token } });
+      var data = await res.json();
+      var box = document.getElementById('history-list');
+      if (!data.ok || !data.history.length) { box.textContent = '还没有任务记录'; return; }
+      box.innerHTML = '';
+      box.className = '';
+      data.history.forEach(function(h) {
+        var div = document.createElement('div');
+        div.className = 'h-item';
+        div.innerHTML = '<div class="h-task">' + String(h.task).replace(/</g, '&lt;') + '</div>' +
+          '<div class="h-meta">' + fmtTime(h.time) + ' · ' + (h.tokens || 0) + ' token = ' + (h.charged != null ? h.charged : h.tokens) + ' 🍊 · ' +
+          (h.ok ? '✅' : '❌') + ' 剩 ' + h.balanceAfter + '</div>';
+        box.appendChild(div);
+      });
+    } catch (e) {}
+  }
+
+  async function checkSuper() {
+    try {
+      var res = await fetch('/api/lobster/admin/users', { headers: { 'Authorization': token } });
+      if (res.status === 403) return;
+      var data = await res.json();
+      if (data.ok) {
+        document.getElementById('admin-box').classList.add('open');
+        var html = '所有人余额：';
+        data.users.forEach(function(u) {
+          html += '<br>· ' + String(u.name).replace(/</g, '&lt;') + '：' + u.oranges + ' 🍊';
+        });
+        document.getElementById('adm-list').innerHTML = html;
+      }
+    } catch (e) {}
+  }
+
+  document.getElementById('adm-add').addEventListener('click', async function() {
+    await adminOp('/api/lobster/admin/add');
+  });
+  document.getElementById('adm-set').addEventListener('click', async function() {
+    await adminOp('/api/lobster/admin/set');
+  });
+  async function adminOp(url) {
+    var user = document.getElementById('adm-user').value.trim();
+    var num = Number(document.getElementById('adm-num').value);
+    if (!user || isNaN(num)) { setStatus('请填用户名和数量'); return; }
+    try {
+      var res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: user, amount: num }),
+      });
+      var data = await res.json();
+      setStatus(data.ok ? '操作成功' : (data.msg || '失败'));
+      if (data.ok) { loadBalance(); checkSuper(); }
+    } catch (e) { setStatus('网络错误'); }
+  }
+
+  runBtn.addEventListener('click', async function() {
+    var task = document.getElementById('task').value.trim();
+    if (!task) { setStatus('先写任务内容'); return; }
+    runBtn.disabled = true;
+    setStatus('提交中...');
+    try {
+      var res = await fetch('/api/lobster/run', {
+        method: 'POST',
+        headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task: task }),
+      });
+      var data = await res.json();
+      if (!data.ok) { setStatus(data.msg || '失败'); runBtn.disabled = false; return; }
+      setStatus('排队中（第 ' + data.position + ' 位）...');
+      logEl.textContent = '';
+      logEl.style.display = 'block';
+      resultEl.style.display = 'none';
+      watch(data.taskId);
+    } catch (e) { setStatus('网络错误'); runBtn.disabled = false; }
+  });
+
+  var currentTaskId = null;
+
+  function showApproval(d) {
+    document.getElementById('approve-cmd').textContent = d.cmd || '';
+    document.getElementById('approve-box').style.display = 'block';
+    log('🌐 AI 请求联网，等待你的决定...');
+  }
+  function hideApproval() {
+    document.getElementById('approve-box').style.display = 'none';
+  }
+  document.getElementById('approve-yes').addEventListener('click', function() {
+    answerApproval(true);
+  });
+  document.getElementById('approve-no').addEventListener('click', function() {
+    answerApproval(false);
+  });
+  async function answerApproval(approve) {
+    if (!currentTaskId) return;
+    try {
+      await fetch('/api/lobster/approve/' + currentTaskId, {
+        method: 'POST',
+        headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approve: approve }),
+      });
+    } catch (e) {}
+    hideApproval();
+  }
+
+  function watch(taskId) {
+    currentTaskId = taskId;
+    if (es) es.close();
+    // EventSource 不能带 header，走 query 参数
+    es = new EventSource('/api/lobster/stream/' + taskId + '?token=' + encodeURIComponent(token));
+    es.onmessage = function(ev) {
+      var msg;
+      try { msg = JSON.parse(ev.data); } catch (e) { return; }
+      if (msg.type === 'step') {
+        var s = msg.step || {};
+        if (s.type === 'llm_call') {
+          log('🧠 第 ' + s.step + ' 步：思考中...');
+        } else if (s.type === 'tool_call') {
+          var brief = s.name === 'run_command' ? (s.args && s.args.cmd)
+            : (s.args && (s.args.path || ''));
+          var div1 = document.createElement('div');
+          div1.className = 'lg-tool';
+          div1.textContent = '🔧 ' + s.name + (brief ? '：' + brief : '');
+          logEl.appendChild(div1);
+          logEl.scrollTop = logEl.scrollHeight;
+        } else if (s.type === 'tool_result') {
+          var line = String(s.result || '').split('\n')[0].slice(0, 140);
+          var div2 = document.createElement('div');
+          div2.className = 'lg-res';
+          div2.textContent = '  ↳ ' + line;
+          logEl.appendChild(div2);
+          logEl.scrollTop = logEl.scrollHeight;
+        } else if (s.type === 'tool_error') {
+          var div3 = document.createElement('div');
+          div3.className = 'lg-err';
+          div3.textContent = '⚠️ ' + (s.error || '');
+          logEl.appendChild(div3);
+          logEl.scrollTop = logEl.scrollHeight;
+        } else if (s.type === 'answer' || s.type === 'done') {
+          showResult(s.text);
+        } else {
+          log(JSON.stringify(s).slice(0, 160));
+        }
+      } else if (msg.type === 'status') {
+        setStatus('状态：' + msg.status + (msg.tokens ? ' · 已用 ' + msg.tokens + ' token ≈ ' + Math.ceil(msg.tokens / 100) + ' 🍊' : ''));
+      } else if (msg.type === 'approval_request') {
+        showApproval(msg);
+      } else if (msg.type === 'approval_result') {
+        hideApproval();
+        log(msg.approved ? '✅ 你同意了联网，本次任务后续网络命令直接放行' : '🚫 联网被拒绝' + (msg.timeout ? '（超时）' : ''));
+      } else if (msg.type === 'finish') {
+        es.close(); es = null;
+        var r = msg.result || {};
+        var debtNote = r.debt ? '（已欠 ' + r.debt + ' 🍊，无利息）' : '';
+        setStatus(r.ok ? '✅ 完成！' + (r.tokens || 0) + ' token = ' + (r.charged || 0) + ' 🍊，' + (r.orangesLeft < 0 ? '现在欠 ' + (-r.orangesLeft) : '剩 ' + r.orangesLeft) + ' 🍊' + debtNote : '❌ 失败：' + (r.msg || ''));
+        if (r.ok) showResult(r.msg);
+        else log('===== 失败：' + (r.msg || '') + ' =====');
+        runBtn.disabled = false;
+        loadBalance(); loadHistory();
+      }
+    };
+    es.onerror = function() {
+      if (es) { es.close(); es = null; }
+      setStatus('直播中断（任务可能仍在后台执行）');
+      runBtn.disabled = false;
+    };
+  }
+
+  if (!token) { setStatus('未登录，请先在聊天室登录一次'); runBtn.disabled = true; }
+  loadBalance(); loadHistory(); checkSuper();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🧠 每日一题</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: linear-gradient(160deg, #1a237e, #0d47a1, #000); color: #e3f2fd; font-family: -apple-system, "PingFang SC", sans-serif; min-height: 100vh; padding: 20px; }
+  .header { max-width: 520px; margin: 0 auto 20px; display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { color: #64b5f6; font-size: 22px; }
+  .header a { color: #90caf9; text-decoration: none; font-size: 14px; }
+  .card { max-width: 520px; margin: 0 auto; background: rgba(13,71,161,.45); border: 2px solid #42a5f5; border-radius: 18px; padding: 28px 24px; box-shadow: 0 0 30px rgba(66,165,245,.3); }
+  .date { font-size: 13px; color: #90caf9; margin-bottom: 12px; }
+  .question { font-size: 22px; color: #fff; font-weight: 700; line-height: 1.5; margin-bottom: 22px; }
+  input { width: 100%; padding: 14px; border-radius: 10px; border: 2px solid #1976d2; background: #0a1a3a; color: #fff; font-size: 16px; outline: none; margin-bottom: 12px; }
+  input:focus { border-color: #64b5f6; }
+  button { width: 100%; padding: 14px; border: none; border-radius: 10px; background: linear-gradient(135deg, #42a5f5, #1976d2); color: #fff; font-size: 17px; font-weight: 700; cursor: pointer; }
+  button:active { transform: scale(.97); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .result { margin-top: 20px; padding: 16px; border-radius: 10px; text-align: center; font-size: 16px; font-weight: 600; display: none; }
+  .result.win { background: rgba(76,175,80,.2); border: 1px solid #4caf50; color: #a5d6a7; }
+  .result.lose { background: rgba(244,67,54,.15); border: 1px solid #ef5350; color: #ef9a9a; }
+  #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #64b5f6; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #42a5f5; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="header"><h1>🧠 每日一题</h1><a href="/">← 返回聊天室</a></div>
+<div class="card">
+  <div class="date" id="date">加载中...</div>
+  <div class="question" id="question">...</div>
+  <input id="answer" placeholder="输入你的答案..." onkeydown="if(event.key==='Enter') __submit()">
+  <button id="btn" onclick="__submit()">提交答案（答对得 100🍊）</button>
+  <div class="result" id="result"></div>
+</div>
+<div id="toast"></div>
+<script>
+const token = localStorage.getItem('token');
+if (!token) location.href = '/';
+function toast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500); }
+function render(d) {
+  if (!d || !d.quiz) {
+    document.getElementById('question').textContent = '今天还没出题，等 7:00 自动出题';
+    document.getElementById('btn').disabled = true;
+    return;
+  }
+  document.getElementById('date').textContent = '📅 ' + d.quiz.date;
+  document.getElementById('question').textContent = d.quiz.question;
+  if (d.quiz.answered) {
+    document.getElementById('btn').disabled = true;
+    document.getElementById('answer').disabled = true;
+    const r = document.getElementById('result');
+    r.style.display = 'block';
+    r.className = 'result win';
+    r.textContent = '🎉 ' + (d.quiz.winnerName || '有人') + ' 已答对，今天结束';
+  }
+}
+fetch('/api/quiz/today', { headers: { Authorization: token } }).then(r => r.json()).then(d => { if (d.ok) render(d); });
+window.__submit = async function() {
+  const ans = document.getElementById('answer').value.trim();
+  if (!ans) return toast('先写答案');
+  const btn = document.getElementById('btn');
+  btn.disabled = true;
+  const d = await fetch('/api/quiz/answer', { method: 'POST', headers: { Authorization: token, 'Content-Type': 'application/json' }, body: JSON.stringify({ answer: ans }) }).then(r => r.json());
+  const r = document.getElementById('result');
+  r.style.display = 'block';
+  if (d.ok) {
+    r.className = 'result win';
+    r.textContent = '🎉 答对啦！+100🍊';
+    btn.disabled = true;
+    document.getElementById('answer').disabled = true;
+  } else {
+    r.className = 'result lose';
+    r.textContent = '❌ ' + d.msg;
+    btn.disabled = false;
+  }
+};
+const socket = io({ auth: { token } });
+socket.on('quiz_won', d => toast('🎉 ' + d.displayName + ' 答对，答案：' + d.answer));
+</script>
+</body>
+</html>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>📅 橘域网日历</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f172a; color: #e2e8f0; font-family: -apple-system, "PingFang SC", sans-serif; min-height: 100vh; padding: 20px; }
+  .header { max-width: 600px; margin: 0 auto 20px; display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { color: #38bdf8; font-size: 22px; }
+  .header a { color: #94a3b8; text-decoration: none; font-size: 14px; }
+  
+  .add-box { max-width: 600px; margin: 0 auto 24px; background: #1e293b; padding: 16px; border-radius: 12px; border: 1px solid #334155; display: flex; flex-direction: column; gap: 10px; }
+  .add-box input, .add-box textarea { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; font-family: inherit; outline: none; }
+  .add-box .row { display: flex; gap: 10px; }
+  .add-box input[type="date"] { flex: 1; }
+  .add-box input[type="time"] { flex: 1; }
+  .add-box button { padding: 12px; border: none; border-radius: 8px; background: #38bdf8; color: #000; font-weight: bold; font-size: 15px; cursor: pointer; }
+  .add-box button:active { transform: scale(.98); }
+  
+  .event-list { max-width: 600px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+  .event-card { background: #1e293b; border-left: 4px solid #38bdf8; padding: 16px; border-radius: 8px; display: flex; justify-content: space-between; align-items: flex-start; }
+  .event-info h3 { font-size: 16px; color: #fff; margin-bottom: 4px; }
+  .event-info .time { font-size: 13px; color: #38bdf8; margin-bottom: 8px; }
+  .event-info .desc { font-size: 14px; color: #94a3b8; }
+  .event-info .creator { font-size: 12px; color: #64748b; margin-top: 8px; }
+  .del-btn { background: transparent; color: #ef4444; border: 1px solid #ef4444; padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+  .del-btn:hover { background: #ef4444; color: #fff; }
+  #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #38bdf8; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #38bdf8; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="header"><h1>📅 橘域网日历</h1><a href="/">← 返回聊天室</a></div>
+
+<div class="add-box">
+  <input type="text" id="title" placeholder="事件名称（如：班级聚会）" maxlength="30">
+  <div class="row">
+    <input type="date" id="date">
+    <input type="time" id="time">
+  </div>
+  <textarea id="desc" placeholder="备注细节（可选）" rows="2"></textarea>
+  <button onclick="__add()">添加日程</button>
+</div>
+
+<div class="event-list" id="list">加载中...</div>
+<div id="toast"></div>
+
+<script>
+const token = localStorage.getItem('token');
+if (!token) location.href = '/';
+function toast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500); }
+
+async function load() {
+  const d = await fetch('/api/calendar').then(r => r.json());
+  if (!d.ok) return;
+  document.getElementById('list').innerHTML = d.events.map(e => `
+    <div class="event-card">
+      <div class="event-info">
+        <h3>${e.title}</h3>
+        <div class="time">📅 ${e.date} ${e.time ? '⏰ '+e.time : ''}</div>
+        ${e.desc ? `<div class="desc">${e.desc}</div>` : ''}
+        <div class="creator">添加者：${e.creator}</div>
+      </div>
+      <button class="del-btn" onclick="__del('${e.id}')">删除</button>
+    </div>
+  `).join('');
+}
+
+window.__add = async function() {
+  const title = document.getElementById('title').value.trim();
+  const date = document.getElementById('date').value;
+  const time = document.getElementById('time').value;
+  const desc = document.getElementById('desc').value.trim();
+  if (!title || !date) return toast('名称和日期必填');
+  
+  const d = await fetch('/api/calendar', {
+    method: 'POST', headers: { Authorization: token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, date, time, desc })
+  }).then(r => r.json());
+  
+  if (d.ok) { document.getElementById('title').value=''; document.getElementById('desc').value=''; load(); toast('添加成功'); }
+  else toast(d.msg);
+};
+
+window.__del = async function(id) {
+  if (!confirm('确定删除该日程？')) return;
+  const d = await fetch('/api/calendar/' + id, { method: 'DELETE', headers: { Authorization: token } }).then(r => r.json());
+  if (d.ok) load(); else toast(d.msg);
+};
+
+const socket = io({ auth: { token } });
+socket.on('calendar_updated', load);
+socket.on('calendar_deleted', load);
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📈 橘域网证券交易所</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0d1117; color: #c9d1d9; font-family: ui-monospace, monospace; padding: 20px; }
+  .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 15px; margin-bottom: 20px; max-width: 800px; margin: 0 auto 20px; }
+  .header h1 { color: #58a6ff; font-size: 20px; }
+  .header a { color: #8b949e; text-decoration: none; }
+  .balance { color: #f1c40f; font-size: 16px; font-weight: bold; }
+  
+  .container { max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+  
+  .stock-list { display: flex; flex-direction: column; gap: 12px; }
+  .stock-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; display: flex; justify-content: space-between; align-items: center; }
+  .stock-info h3 { color: #fff; font-size: 16px; margin-bottom: 4px; }
+  .stock-info .code { color: #8b949e; font-size: 12px; }
+  .stock-price { font-size: 24px; font-weight: bold; margin-right: 20px; }
+  .up { color: #2ea043; } .down { color: #f85149; } .stable { color: #8b949e; }
+  
+  .actions { display: flex; gap: 8px; }
+  .actions input { width: 60px; padding: 6px; background: #0d1117; border: 1px solid #30363d; color: #fff; border-radius: 4px; text-align: center;}
+  .btn-buy { background: #2ea043; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+  .btn-sell { background: #f85149; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+  
+  .portfolio { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
+  .portfolio h2 { font-size: 16px; color: #58a6ff; margin-bottom: 12px; }
+  .port-item { display: flex; justify-content: space-between; font-size: 14px; padding: 8px 0; border-bottom: 1px solid #30363d; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📈 橘域网证券交易所</h1>
+  <div>余额: <span class="balance" id="my-balance">0</span> 🍊</div>
+  <a href="/">← 返回大厅</a>
+</div>
+
+<div class="container">
+  <div class="stock-list" id="stock-list"></div>
+  
+  <div class="portfolio">
+    <h2>💼 我的持仓</h2>
+    <div id="my-portfolio"></div>
+  </div>
+</div>
+
+<script>
+let myToken = localStorage.getItem('token');
+let marketData = null;
+
+function loadMarket() {
+  fetch('/api/stock/market', { headers: { 'Authorization': myToken } }).then(r=>r.json()).then(d => {
+    if (!d.ok) return;
+    marketData = d;
+    document.getElementById('my-balance').innerText = d.balance;
+    
+    // 渲染行情
+    const list = document.getElementById('stock-list');
+    list.innerHTML = Object.keys(d.stocks).map(code => {
+      const s = d.stocks[code];
+      let colorCls = s.trend === 'up' ? 'up' : (s.trend === 'down' ? 'down' : 'stable');
+      let arrow = s.trend === 'up' ? '▲' : (s.trend === 'down' ? '▼' : '-');
+      return `
+        <div class="stock-card">
+          <div class="stock-info">
+            <h3>${s.name}</h3>
+            <div class="code">${code}</div>
+          </div>
+          <div style="display:flex; align-items:center;">
+            <div class="stock-price ${colorCls}">${s.price} 🍊 <span style="font-size:12px;">${arrow}</span></div>
+            <div class="actions">
+              <input type="number" id="amt-${code}" value="1" min="1">
+              <button class="btn-buy" onclick="__trade('buy', '${code}')">买入</button>
+              <button class="btn-sell" onclick="__trade('sell', '${code}')">卖出</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // 渲染持仓
+    const port = document.getElementById('my-portfolio');
+    const myPort = d.myPortfolio || {};
+    const codes = Object.keys(myPort);
+    if (codes.length === 0) {
+      port.innerHTML = '<div style="color:#8b949e; font-size:14px;">你还没有持仓，快去当韭菜吧！</div>';
+      return;
+    }
+    port.innerHTML = codes.map(code => {
+      const p = myPort[code];
+      const currentPrice = d.stocks[code].price;
+      const currentValue = currentPrice * p.count;
+      const profit = currentValue - p.cost;
+      let color = profit >= 0 ? 'up' : 'down';
+      let sign = profit >= 0 ? '+' : '';
+      return `
+        <div class="port-item">
+          <span>${d.stocks[code].name} (${code})</span>
+          <span>${p.count} 股</span>
+          <span>市值: ${currentValue} 🍊</span>
+          <span class="${color}">盈亏: ${sign}${profit} 🍊</span>
+        </div>
+      `;
+    }).join('');
+  });
+}
+
+window.__trade = function(type, code) {
+  const amt = document.getElementById('amt-' + code).value;
+  fetch('/api/stock/' + type, {
+    method: 'POST', headers: { 'Authorization': myToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: code, amount: amt })
+  }).then(r=>r.json()).then(d => {
+    alert(d.msg);
+    if (d.ok) loadMarket();
+  });
+};
+
+loadMarket();
+setInterval(loadMarket, 5000); // 每 5 秒刷新一次行情
+</script>
+</body>
+</html>
