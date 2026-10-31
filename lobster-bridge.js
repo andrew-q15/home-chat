@@ -203,8 +203,23 @@ app.post('/api/market/:id/buy', auth, (req, res) => {
   }
   const sellerBal = ctx.getBalance(seller.id);
 
+  // 交易税 5% 进金库
+  const tax = Math.floor(item.price * 0.05);
+  const sellerGet = item.price - tax;
   buyerBal.oranges -= item.price;
-  sellerBal.oranges = Math.min(ctx.ORANGE_MAX, sellerBal.oranges + item.price);
+  sellerBal.oranges = Math.min(ctx.ORANGE_MAX, sellerBal.oranges + sellerGet);
+  if (tax > 0) {
+    try {
+      const TF = path.join(__dirname, 'treasury.json');
+      const t = JSON.parse(fs.readFileSync(TF, 'utf8'));
+      t.oranges = (t.oranges || 0) + tax;
+      if (t.history === undefined) t.history = [];
+      t.history.unshift({ time: Date.now(), type: 'tax', amount: tax, reason: '跳蚤市场交易税《' + item.title + '》', by: 'market' });
+      if (t.history.length > 200) t.history = t.history.slice(0, 200);
+      fs.writeFileSync(TF, JSON.stringify(t, null, 2));
+      console.log('[税] 跳蚤市场《' + item.title + '》成交 ' + item.price + ' 🍊，税 ' + tax + ' 🍊 进金库');
+    } catch (e) { console.error('[税] 写金库失败:', e.message); }
+  }
   item.sold = true;
   item.soldTo = req.username;
   item.soldAt = Date.now();
