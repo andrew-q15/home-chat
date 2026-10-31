@@ -36,9 +36,10 @@ module.exports = function setupEventsRouter(app, ctx) {
     ctx.saveLobster(ctx.lobsterData);
     ctx.saveState();
 
-    // 随机送一张表情包
-    const stickerPool = ['🎉','🎊','🦞','🍊','🏆','💎','👑','🐳','🎁','⭐'];
-    const sticker = stickerPool[Math.floor(Math.random() * stickerPool.length)];
+    // 签到掉落表情包
+    const SYSTEM_STICKERS = ['/system-stickers/orange.svg', '/system-stickers/success.svg', '/system-stickers/whale.svg'];
+    const sticker = SYSTEM_STICKERS[Math.floor(Math.random() * SYSTEM_STICKERS.length)];
+
     res.json({ ok: true, earn, streak, isJackpot, total: bal.oranges, sticker });
   });
 

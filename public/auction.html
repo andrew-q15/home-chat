@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔨 赛博拍卖行</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: radial-gradient(circle at 20% 10%, #1a1020 0%, #0a0610 55%, #030205 100%); color: #e0d7ff; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", monospace; min-height: 100vh; padding: 16px; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+  h1 { font-size: 22px; color: #ffb84d; letter-spacing: 2px; text-shadow: 0 0 12px rgba(255,184,77,.55); }
+  #balance { font-size: 14px; color: #ffd54f; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tab { padding: 8px 16px; background: transparent; color: #b8a8d8; border: 1px solid #5a4a7a; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  .tab.active { background: #ffb84d; color: #1a1020; border-color: #ffb84d; font-weight: 700; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .card { background: linear-gradient(160deg, rgba(30,20,50,.92), rgba(15,8,25,.92)); border: 1px solid rgba(255,184,77,.25); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .card h3 { color: #ffb84d; font-size: 16px; margin-bottom: 8px; }
+  .card .meta { font-size: 12px; color: #8a7aaa; margin-bottom: 8px; }
+  .card .price { font-size: 20px; color: #ffd54f; font-weight: 700; }
+  .card .countdown { font-size: 14px; color: #ff5d6c; font-weight: 600; }
+  .card .countdown.safe { color: #27d17c; }
+  .card .bids { margin-top: 8px; font-size: 13px; color: #b8a8d8; max-height: 120px; overflow-y: auto; }
+  .card .bids div { padding: 2px 0; }
+  .card .actions { margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .card .actions input { width: 100px; padding: 8px; background: #1a1020; color: #e0d7ff; border: 1px solid #5a4a7a; border-radius: 6px; font-size: 14px; }
+  .card .actions button { padding: 8px 16px; background: #ffb84d; color: #1a1020; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 14px; }
+  .card .actions button:disabled { background: #5a4a7a; color: #8a7aaa; cursor: not-allowed; }
+  .form-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .form-row input, .form-row select { flex: 1; min-width: 120px; padding: 10px; background: #1a1020; color: #e0d7ff; border: 1px solid #5a4a7a; border-radius: 6px; font-size: 14px; }
+  #msg { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #ffb84d; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #ffb84d; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
+  #msg.show { opacity: 1; }
+  .empty { text-align: center; color: #8a7aaa; padding: 40px 0; font-size: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🔨 赛博拍卖行</h1>
+  <div id="balance">余额加载中…</div>
+</header>
+<div class="tabs">
+  <button class="tab active" data-tab="ongoing">进行中</button>
+  <button class="tab" data-tab="create">挂拍</button>
+  <button class="tab" data-tab="mine">我的挂拍</button>
+  <button class="tab" data-tab="history">历史成交</button>
+</div>
+<div class="panel active" id="panel-ongoing"><div class="empty">加载中…</div></div>
+<div class="panel" id="panel-create">
+  <div class="card">
+    <h3>挂拍新物品</h3>
+    <div class="form-row"><input id="f-name" placeholder="物品名（1-50 字）" maxlength="50"></div>
+    <div class="form-row"><input id="f-desc" placeholder="描述（可选，300 字内）" maxlength="300"></div>
+    <div class="form-row"><input id="f-price" type="number" placeholder="起拍价（≥1🍊）" min="1"></div>
+    <div class="form-row"><select id="f-minutes"><option value="5">5 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="custom">自定义</option></select><input id="f-custom" type="number" placeholder="自定义分钟（1-10080）" min="1" max="10080" style="display:none"></div>
+    <div class="actions"><button id="btn-create">挂拍</button></div>
+  </div>
+</div>
+<div class="panel" id="panel-mine"><div class="empty">加载中…</div></div>
+<div class="panel" id="panel-history"><div class="empty">加载中…</div></div>
+<div id="msg"></div>
+<script>
+const token = localStorage.getItem("token");
+if (!token) location.href = "/";
+const socket = io({ auth: { token } });
+let myName = null;
+let balance = 0;
+let ongoing = [];
+let history = [];
+const timers = {};
+
+function toast(m) { const t = document.getElementById("msg"); t.textContent = m; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2500); }
+function esc(s) { return String(s || "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+function fmtTime(ts) { return new Date(ts).toLocaleString("zh-CN"); }
+function fmtLeft(endAt) { const left = Math.max(0, endAt - Date.now()); const m = Math.floor(left / 60000); const s = Math.floor((left % 60000) / 1000); return m + "分" + s + "秒"; }
+
+async function loadMe() {
+  try {
+    const r = await fetch("/api/lobster/balance", { headers: { Authorization: token } });
+    const d = await r.json();
+    if (d.ok) { balance = d.oranges; document.getElementById("balance").textContent = "余额：" + balance + " 🍊"; }
+  } catch (e) {}
+  try {
+    const r = await fetch("/api/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
+    const d = await r.json();
+    if (d.ok) myName = d.username;
+  } catch (e) {}
+}
+
+async function loadList() {
+  const r = await fetch("/api/auction/list");
+  const d = await r.json();
+  if (!d.ok) return;
+  ongoing = d.ongoing || [];
+  history = d.history || [];
+  renderOngoing();
+  renderMine();
+  renderHistory();
+}
+
+function renderOngoing() {
+  const el = document.getElementById("panel-ongoing");
+  if (ongoing.length === 0) { el.innerHTML = "<div class=\"empty\">暂无进行中的拍卖</div>"; return; }
+  el.innerHTML = ongoing.map(a => {
+    const top = a.bids.length ? Math.max.apply(null, a.bids.map(b => b.amount)) : 0;
+    const canBid = a.seller !== myName;
+    const minNext = top > 0 ? top + 1 : a.startPrice;
+    const bidsHtml = a.bids.length ? a.bids.slice().sort((x, y) => y.amount - x.amount).slice(0, 5).map(b => "<div>" + esc(b.bidderName) + " 出价 " + b.amount + " 🍊</div>").join("") : "<div>暂无出价</div>";
+    return "<div class=\"card\" data-id=\"" + a.id + "\">" +
+      "<h3>" + esc(a.name) + "</h3>" +
+      "<div class=\"meta\">卖家：" + esc(a.sellerName) + " · 起拍 " + a.startPrice + " 🍊 · " + fmtTime(a.endAt) + " 结束</div>" +
+      (a.desc ? "<div class=\"meta\">" + esc(a.desc) + "</div>" : "") +
+      "<div class=\"price\">当前最高：" + (top > 0 ? top + " 🍊" : "暂无出价") + "</div>" +
+      "<div class=\"countdown\" data-endat=\"" + a.endAt + "\">剩余 " + fmtLeft(a.endAt) + "</div>" +
+      "<div class=\"bids\">" + bidsHtml + "</div>" +
+      (canBid ? "<div class=\"actions\"><input type=\"number\" class=\"bid-input\" min=\"" + minNext + "\" value=\"" + minNext + "\" placeholder=\"出价\"><button class=\"bid-btn\" data-id=\"" + a.id + "\">出价</button></div>" : "<div class=\"actions\"><span style=\"color:#8a7aaa\">这是你的挂拍</span></div>") +
+    "</div>";
+  }).join("");
+  el.querySelectorAll(".bid-btn").forEach(btn => {
+    btn.onclick = () => doBid(btn.dataset.id);
+  });
+  startCountdowns();
+}
+
+function startCountdowns() {
+  Object.keys(timers).forEach(k => { clearInterval(timers[k]); delete timers[k]; });
+  document.querySelectorAll(".countdown").forEach(el => {
+    const endAt = Number(el.dataset.endat);
+    if (!endAt) return;
+    const tick = () => {
+      const left = endAt - Date.now();
+      if (left <= 0) { el.textContent = "已结束"; el.classList.remove("safe"); return; }
+      el.textContent = "剩余 " + fmtLeft(endAt);
+      el.classList.toggle("safe", left > 60000);
+    };
+    tick();
+    timers[el.dataset.endat] = setInterval(tick, 1000);
+  });
+}
+
+function renderMine() {
+  const el = document.getElementById("panel-mine");
+  const mine = ongoing.filter(a => a.seller === myName);
+  if (mine.length === 0) { el.innerHTML = "<div class=\"empty\">你还没有进行中的挂拍</div>"; return; }
+  el.innerHTML = mine.map(a => {
+    const top = a.bids.length ? Math.max.apply(null, a.bids.map(b => b.amount)) : 0;
+    return "<div class=\"card\"><h3>" + esc(a.name) + "</h3>" +
+      "<div class=\"meta\">起拍 " + a.startPrice + " 🍊 · " + fmtTime(a.endAt) + " 结束</div>" +
+      "<div class=\"price\">当前最高：" + (top > 0 ? top + " 🍊" : "暂无出价") + "</div>" +
+      "<div class=\"countdown\" data-endat=\"" + a.endAt + "\">剩余 " + fmtLeft(a.endAt) + "</div>" +
+    "</div>";
+  }).join("");
+  startCountdowns();
+}
+
+function renderHistory() {
+  const el = document.getElementById("panel-history");
+  if (history.length === 0) { el.innerHTML = "<div class=\"empty\">暂无成交记录</div>"; return; }
+  el.innerHTML = history.map(h => {
+    const sold = h.sold;
+    return "<div class=\"card\"><h3>" + esc(h.name) + "</h3>" +
+      "<div class=\"meta\">卖家：" + esc(h.seller) + " · " + fmtTime(h.endedAt) + "</div>" +
+      (sold ? "<div class=\"price\">成交价：" + h.finalPrice + " 🍊 · 买家：" + esc(h.buyer) + "</div><div class=\"meta\">卖家得 " + h.sellerShare + " 🍊 · 金库收 " + h.treasuryShare + " 🍊</div>" : "<div class=\"meta\" style=\"color:#ff5d6c\">流拍</div>") +
+    "</div>";
+  }).join("");
+}
+
+async function doBid(id) {
+  const card = document.querySelector(".card[data-id=\"" + id + "\"]");
+  if (!card) return;
+  const input = card.querySelector(".bid-input");
+  const amount = Number(input.value);
+  if (!amount || amount < 1) return toast("出价不合法");
+  const r = await fetch("/api/auction/" + id + "/bid", {
+    method: "POST", headers: { Authorization: token, "Content-Type": "application/json" },
+    body: JSON.stringify({ amount })
+  });
+  const d = await r.json();
+  if (d.ok) { toast("出价成功 " + amount + " 🍊"); loadMe(); loadList(); }
+  else toast(d.msg || "出价失败");
+}
+
+document.getElementById("f-minutes").onchange = function() {
+  document.getElementById("f-custom").style.display = this.value === "custom" ? "block" : "none";
+};
+
+document.getElementById("btn-create").onclick = async function() {
+  const name = document.getElementById("f-name").value.trim();
+  const desc = document.getElementById("f-desc").value.trim();
+  const startPrice = Number(document.getElementById("f-price").value);
+  const sel = document.getElementById("f-minutes").value;
+  const minutes = sel === "custom" ? Number(document.getElementById("f-custom").value) : Number(sel);
+  if (!name) return toast("物品名不能为空");
+  if (!startPrice || startPrice < 1) return toast("起拍价最低 1🍊");
+  if (!minutes || minutes < 1 || minutes > 10080) return toast("时长 1 分钟 ~ 7 天");
+  const r = await fetch("/api/auction", {
+    method: "POST", headers: { Authorization: token, "Content-Type": "application/json" },
+    body: JSON.stringify({ name, desc, startPrice, minutes })
+  });
+  const d = await r.json();
+  if (d.ok) { toast("挂拍成功"); document.getElementById("f-name").value = ""; document.getElementById("f-desc").value = ""; document.getElementById("f-price").value = ""; switchTab("ongoing"); loadList(); }
+  else toast(d.msg || "挂拍失败");
+};
+
+function switchTab(name) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + name));
+}
+
+document.querySelectorAll(".tab").forEach(t => {
+  t.onclick = () => switchTab(t.dataset.tab);
+});
+
+socket.on("auction_new", (a) => { toast("新拍卖：" + a.name); loadList(); });
+socket.on("auction_bid", (b) => { toast(b.bidderName + " 出价 " + b.amount + " 🍊 拍《" + b.name + "》"); loadList(); });
+socket.on("auction_ending", (e) => { toast("《" + e.name + "》最后 " + e.secondsLeft + " 秒！"); });
+socket.on("auction_sold", (s) => { toast(s.sold ? "《" + s.name + "》成交 " + s.finalPrice + " 🍊" : "《" + s.name + "》流拍"); loadList(); });
+
+loadMe().then(() => { loadList(); });
+setInterval(loadMe, 30000);
+</script>
+</body>
+</html>
