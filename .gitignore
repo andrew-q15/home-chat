@@ -53,3 +53,13 @@ __pycache__/
 .DS_Store
 .bak/
 .git.old-*
+
+# 非标准备份残留
+*.bak
+*.bak2
+*.new
+*.KNOWN-GOOD-*
+*.broken-*
+
+# 下载资源
+public/downloads/
