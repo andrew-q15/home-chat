@@ -63,3 +63,5 @@ __pycache__/
 
 # 下载资源
 public/downloads/
+treasury.json
+auction.json

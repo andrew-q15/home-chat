@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🏦 中央金库</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: radial-gradient(circle at 20% 10%, #1a1a0a 0%, #0a0a05 55%, #020201 100%); color: #e0e0d0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", monospace; min-height: 100vh; padding: 16px; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+  h1 { font-size: 22px; color: #ffd54f; letter-spacing: 2px; text-shadow: 0 0 12px rgba(255,213,79,.55); }
+  #status { font-size: 13px; color: #8a8a5a; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 16px; }
+  .card { background: linear-gradient(160deg, rgba(40,40,20,.92), rgba(20,20,8,.92)); border: 1px solid rgba(255,213,79,.25); border-radius: 12px; padding: 16px; }
+  .card .label { font-size: 12px; color: #a8a878; }
+  .card .value { font-size: 28px; color: #ffd54f; font-weight: 700; margin-top: 6px; }
+  .panel { background: linear-gradient(160deg, rgba(30,30,15,.92), rgba(15,15,8,.92)); border: 1px solid rgba(255,213,79,.2); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .panel h3 { color: #ffd54f; font-size: 16px; margin-bottom: 10px; }
+  .form-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .form-row input { flex: 1; min-width: 120px; padding: 10px; background: #0a0a05; color: #e0e0d0; border: 1px solid #5a5a30; border-radius: 6px; font-size: 14px; }
+  .form-row button { padding: 10px 20px; background: #ffd54f; color: #1a1a0a; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 14px; }
+  .form-row button:disabled { background: #5a5a30; color: #8a8a5a; cursor: not-allowed; }
+  .history { max-height: 300px; overflow-y: auto; font-size: 13px; }
+  .history div { padding: 4px 0; border-bottom: 1px solid rgba(255,213,79,.1); color: #b8b888; }
+  .history .time { color: #6a6a4a; font-size: 11px; margin-right: 8px; }
+  .history .amt { color: #ffd54f; font-weight: 700; }
+  #msg { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #ffd54f; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #ffd54f; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
+  #msg.show { opacity: 1; }
+  .empty { text-align: center; color: #6a6a4a; padding: 20px 0; font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏦 中央金库</h1>
+  <div id="status">加载中…</div>
+</header>
+<div class="cards">
+  <div class="card"><div class="label">🍊 金库余额</div><div class="value" id="v-oranges">-</div></div>
+  <div class="card"><div class="label">🥩 食材资产</div><div class="value" id="v-items">-</div></div>
+  <div class="card"><div class="label">📈 股票资产</div><div class="value" id="v-stocks">-</div></div>
+  <div class="card"><div class="label">😀 贴纸资产</div><div class="value" id="v-stickers">-</div></div>
+</div>
+<div class="panel" id="admin-panel" style="display:none">
+  <h3>超管操作</h3>
+  <div class="form-row">
+    <input id="amt" type="number" placeholder="金额（🍊）" min="1">
+    <input id="reason" placeholder="备注（可选）">
+    <button id="btn-deposit">充值</button>
+    <button id="btn-withdraw" style="background:#ff5d6c">提取</button>
+  </div>
+</div>
+<div class="panel">
+  <h3>金库流水（最近 50 条）</h3>
+  <div class="history" id="history"><div class="empty">加载中…</div></div>
+</div>
+<div id="msg"></div>
+<script>
+const token = localStorage.getItem("token");
+if (!token) location.href = "/";
+let isSuper = false;
+
+function toast(m) { const t = document.getElementById("msg"); t.textContent = m; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2500); }
+function esc(s) { return String(s || "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+function fmtTime(ts) { return new Date(ts).toLocaleString("zh-CN"); }
+
+async function load() {
+  const r = await fetch("/api/treasury", { headers: { Authorization: token } });
+  const d = await r.json();
+  if (!d.ok) { document.getElementById("status").textContent = "加载失败"; return; }
+  document.getElementById("status").textContent = "更新于 " + new Date().toLocaleTimeString("zh-CN");
+  document.getElementById("v-oranges").textContent = d.oranges + " 🍊";
+  document.getElementById("v-items").textContent = Object.keys(d.items || {}).length + " 种";
+  document.getElementById("v-stocks").textContent = Object.keys(d.stocks || {}).length + " 支";
+  document.getElementById("v-stickers").textContent = (d.stickers || []).length + " 张";
+  isSuper = !!d.isSuper;
+  document.getElementById("admin-panel").style.display = isSuper ? "block" : "none";
+  const h = d.history || [];
+  const hel = document.getElementById("history");
+  if (h.length === 0) { hel.innerHTML = "<div class=\"empty\">暂无流水</div>"; return; }
+  hel.innerHTML = h.map(x => "<div><span class=\"time\">" + fmtTime(x.time) + "</span><span class=\"amt\">" + (x.amount > 0 ? "+" : "") + x.amount + " 🍊</span> · " + esc(x.reason) + " · " + esc(x.by) + "</div>").join("");
+}
+
+async function doOp(kind) {
+  const amount = Number(document.getElementById("amt").value);
+  const reason = document.getElementById("reason").value.trim();
+  if (!amount || amount < 1) return toast("金额不合法");
+  const r = await fetch("/api/treasury/" + kind, {
+    method: "POST", headers: { Authorization: token, "Content-Type": "application/json" },
+    body: JSON.stringify({ amount, reason })
+  });
+  const d = await r.json();
+  if (d.ok) { toast((kind === "deposit" ? "充值" : "提取") + "成功，余额 " + d.oranges + " 🍊"); document.getElementById("amt").value = ""; document.getElementById("reason").value = ""; load(); }
+  else toast(d.msg || "操作失败");
+}
+
+document.getElementById("btn-deposit").onclick = () => doOp("deposit");
+document.getElementById("btn-withdraw").onclick = () => doOp("withdraw");
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>

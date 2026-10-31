@@ -143,4 +143,14 @@ module.exports = function mountAllFeatures(app, io, ctx) {
     const setupStats = require('./stats-router');
     setupStats(app, Object.assign({ io }, ctx));
   } catch (e) { console.error('❌ [大屏] 挂载失败:', e.message); }
+  try {
+    const setupTreasury = require("./treasury-router");
+    setupTreasury(app, ctx);
+  } catch (e) { console.error("❌ [金库] 挂载失败:", e.message); }
+
+  try {
+    const setupAuction = require("./auction-router");
+    setupAuction(app, ctx);
+  } catch (e) { console.error("❌ [拍卖] 挂载失败:", e.message); }
+
 };
