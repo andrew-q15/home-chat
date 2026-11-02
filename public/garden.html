@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌱 我的菜园</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: radial-gradient(circle at 20% 10%, #0a1a0a 0%, #050a05 55%, #020302 100%); color: #d0e0d0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", monospace; min-height: 100vh; padding: 16px; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+  h1 { font-size: 22px; color: #7ee787; letter-spacing: 2px; text-shadow: 0 0 12px rgba(126,231,135,.55); }
+  #balance { font-size: 14px; color: #ffd54f; }
+  .section-title { font-size: 16px; color: #7ee787; margin: 16px 0 10px; }
+  #grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 480px; margin: 0 auto; }
+  .plot { aspect-ratio: 1; background: linear-gradient(160deg, rgba(20,40,20,.92), rgba(10,20,10,.92)); border: 2px solid rgba(126,231,135,.25); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all .15s; position: relative; overflow: hidden; }
+  .plot:hover { border-color: #7ee787; }
+  .plot.empty { background: repeating-linear-gradient(45deg, rgba(30,50,30,.5), rgba(30,50,30,.5) 8px, rgba(20,35,20,.5) 8px, rgba(20,35,20,.5) 16px); }
+  .plot .seed { font-size: 40px; line-height: 1; }
+  .plot .timer { font-size: 12px; color: #ffb84d; margin-top: 6px; font-weight: 600; }
+  .plot .status { font-size: 11px; color: #8fa78f; margin-top: 4px; }
+  .plot.mature { border-color: #ffd54f; box-shadow: 0 0 16px rgba(255,213,79,.4); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%, 100% { box-shadow: 0 0 16px rgba(255,213,79,.4); } 50% { box-shadow: 0 0 24px rgba(255,213,79,.7); } }
+  .plot.mature .status { color: #ffd54f; font-weight: 700; }
+  #steal-list { display: flex; flex-direction: column; gap: 8px; max-width: 480px; margin: 0 auto; }
+  .steal-card { background: linear-gradient(160deg, rgba(30,20,40,.92), rgba(15,10,25,.92)); border: 1px solid rgba(255,100,200,.25); border-radius: 10px; padding: 12px; display: flex; justify-content: space-between; align-items: center; }
+  .steal-card .info { flex: 1; }
+  .steal-card .name { font-weight: 700; color: #ffb84d; font-size: 14px; }
+  .steal-card .meta { font-size: 12px; color: #8fa78f; margin-top: 2px; }
+  .steal-card button { padding: 8px 16px; background: #ff5d6c; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 13px; }
+  .steal-card button:hover { background: #ff3d4c; }
+  .steal-card button:disabled { background: #5a4a5a; cursor: not-allowed; }
+  .empty { text-align: center; color: #6a7a6a; padding: 20px 0; font-size: 13px; }
+  #msg { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #7ee787; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #7ee787; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
+  #msg.show { opacity: 1; }
+  #msg.fail { color: #ff5d6c; border-color: #ff5d6c; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🌱 我的菜园</h1>
+  <div id="balance">余额加载中…</div>
+</header>
+<div class="section-title">我的菜园（点空格种菜，点成熟格收获）</div>
+<div id="grid"><div class="empty">加载中…</div></div>
+<div class="section-title">偷菜（别人家成熟的）</div>
+<div id="steal-list"><div class="empty">加载中…</div></div>
+<div id="msg"></div>
+<script>
+const token = localStorage.getItem("token");
+if (!token) location.href = "/";
+const socket = io({ auth: { token } });
+let balance = 0;
+let plots = [];
+let timers = {};
+
+function toast(m, fail) { const t = document.getElementById("msg"); t.textContent = m; t.className = fail ? "show fail" : "show"; setTimeout(() => { t.className = ""; }, 2500); }
+function esc(s) { return String(s || "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+function fmtLeft(ms) { const s = Math.max(0, Math.floor(ms / 1000)); const m = Math.floor(s / 60); const r = s % 60; return m + "分" + r + "秒"; }
+
+async function loadMe() {
+  try {
+    const r = await fetch("/api/lobster/balance", { headers: { Authorization: token } });
+    const d = await r.json();
+    if (d.ok) { balance = d.oranges; document.getElementById("balance").textContent = "余额：" + balance + " 🍊"; }
+  } catch (e) {}
+}
+
+async function loadGarden() {
+  const r = await fetch("/api/garden/my", { headers: { Authorization: token } });
+  const d = await r.json();
+  if (!d.ok) return;
+  plots = d.plots || [];
+  balance = d.balance;
+  document.getElementById("balance").textContent = "余额：" + balance + " 🍊";
+  renderGrid();
+}
+
+function renderGrid() {
+  const el = document.getElementById("grid");
+  Object.keys(timers).forEach(k => { clearInterval(timers[k]); delete timers[k]; });
+  el.innerHTML = plots.map(p => {
+    if (p.empty) {
+      return "<div class=\"plot empty\" data-idx=\"" + p.index + "\"><div class=\"seed\">＋</div><div class=\"status\">种菜 100🍊</div></div>";
+    }
+    const cls = p.mature ? "plot mature" : "plot";
+    const status = p.mature ? "成熟可收获 300🍊" : "生长中";
+    return "<div class=\"" + cls + "\" data-idx=\"" + p.index + "\"><div class=\"seed\">" + esc(p.seed) + "</div><div class=\"timer\" data-matureat=\"" + p.matureAt + "\">" + (p.mature ? "已成熟" : "剩余 " + fmtLeft(p.remainMs)) + "</div><div class=\"status\">" + status + "</div></div>";
+  }).join("");
+  el.querySelectorAll(".plot").forEach(el => { el.onclick = () => onPlotClick(Number(el.dataset.idx)); });
+  startTimers();
+}
+
+function startTimers() {
+  document.querySelectorAll(".timer[data-matureat]").forEach(el => {
+    const matureAt = Number(el.dataset.matureat);
+    if (!matureAt) return;
+    const tick = () => {
+      const left = matureAt - Date.now();
+      if (left <= 0) { el.textContent = "已成熟"; return; }
+      el.textContent = "剩余 " + fmtLeft(left);
+    };
+    tick();
+    const k = "t" + matureAt + "_" + Math.random();
+    timers[k] = setInterval(tick, 1000);
+  });
+}
+
+async function onPlotClick(idx) {
+  const p = plots.find(x => x.index === idx);
+  if (!p) return;
+  if (p.empty) {
+    if (balance < 100) return toast("橘子不足，种菜要 100🍊", true);
+    const r = await fetch("/api/garden/plant", { method: "POST", headers: { Authorization: token, "Content-Type": "application/json" }, body: JSON.stringify({ index: idx }) });
+    const d = await r.json();
+    if (d.ok) { toast("种下 " + d.seed); loadMe(); loadGarden(); } else toast(d.msg || "种菜失败", true);
+  } else if (p.mature) {
+    const r = await fetch("/api/garden/harvest", { method: "POST", headers: { Authorization: token, "Content-Type": "application/json" }, body: JSON.stringify({ index: idx }) });
+    const d = await r.json();
+    if (d.ok) { toast("收获 " + d.seed + "，卖得 " + d.earned + "🍊"); loadMe(); loadGarden(); } else toast(d.msg || "收获失败", true);
+  } else {
+    toast("还没成熟，再等等", true);
+  }
+}
+
+async function loadStealList() {
+  const r = await fetch("/api/garden/list", { headers: { Authorization: token } });
+  const d = await r.json();
+  if (!d.ok) return;
+  const el = document.getElementById("steal-list");
+  const list = d.list || [];
+  if (list.length === 0) { el.innerHTML = "<div class=\"empty\">暂时没有可偷的菜园</div>"; return; }
+  el.innerHTML = list.map(x => {
+    return "<div class=\"steal-card\"><div class=\"info\"><div class=\"name\">" + esc(x.displayName) + " 的菜园</div><div class=\"meta\">成熟 " + x.matureCount + " 格：" + esc(x.seeds.join(" ")) + "</div></div><button data-uid=\"" + x.userId + "\">偷菜</button></div>";
+  }).join("");
+  el.querySelectorAll("button[data-uid]").forEach(btn => { btn.onclick = () => doSteal(btn.dataset.uid, btn); });
+}
+
+async function doSteal(uid, btn) {
+  btn.disabled = true; btn.textContent = "偷...";
+  const r = await fetch("/api/garden/steal", { method: "POST", headers: { Authorization: token, "Content-Type": "application/json" }, body: JSON.stringify({ targetUserId: uid }) });
+  const d = await r.json();
+  btn.disabled = false; btn.textContent = "偷菜";
+  if (d.ok) {
+    if (d.caught) toast(d.msg || "被抓了！", true);
+    else toast("偷到 " + d.count + " 格，卖得 " + d.earn + "🍊");
+    loadMe(); loadGarden(); loadStealList();
+  } else toast(d.msg || "偷菜失败", true);
+}
+
+socket.on("garden_planted", (e) => { if (e.username) toast(e.username + " 种下了 " + e.seed); loadStealList(); });
+socket.on("garden_harvested", (e) => { if (e.username) toast(e.username + " 收获了 " + e.seed); });
+socket.on("garden_steal_caught", (e) => { toast(e.username + " 偷菜被抓，罚款 " + e.penalty + "🍊", true); });
+socket.on("garden_steal_success", (e) => { toast(e.username + " 偷到 " + e.count + " 格，卖得 " + e.earn + "🍊"); loadStealList(); });
+
+loadMe().then(() => { loadGarden(); loadStealList(); });
+setInterval(loadGarden, 10000);
+setInterval(loadStealList, 15000);
+</script>
+</body>
+</html>
