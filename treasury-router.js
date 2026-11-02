@@ -35,7 +35,7 @@ module.exports = function setupTreasury(app, ctx) {
     return { ok: true, oranges: treasury.oranges };
   }
 
-  ctx.treasury = { spend, income, getOranges: () => treasury.oranges, load: () => treasury };
+  ctx.treasury = { spend, income, getOranges: () => treasury.oranges, load: () => treasury, save: () => save(treasury) };
 
   app.get("/api/treasury", (req, res) => {
     const username = tokens[req.headers.authorization];

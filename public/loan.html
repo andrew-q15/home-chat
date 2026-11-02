@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🏦 贷款中心</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: radial-gradient(circle at 20% 10%, #1a0a1a 0%, #0a050a 55%, #020102 100%); color: #e0d0e0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", monospace; min-height: 100vh; padding: 16px; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+  h1 { font-size: 22px; color: #ff7eb8; letter-spacing: 2px; text-shadow: 0 0 12px rgba(255,126,184,.55); }
+  #balance { font-size: 14px; color: #ffd54f; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tab { padding: 8px 16px; background: transparent; color: #b8a8c8; border: 1px solid #5a4a6a; border-radius: 8px; cursor: pointer; font-size: 14px; }
+  .tab.active { background: #ff7eb8; color: #1a0a1a; border-color: #ff7eb8; font-weight: 700; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .card { background: linear-gradient(160deg, rgba(40,20,40,.92), rgba(20,10,20,.92)); border: 1px solid rgba(255,126,184,.25); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .card h3 { color: #ff7eb8; font-size: 16px; margin-bottom: 8px; }
+  .card .meta { font-size: 12px; color: #8a7a9a; margin-bottom: 8px; }
+  .card .amount { font-size: 22px; color: #ffd54f; font-weight: 700; }
+  .card .owed { font-size: 16px; color: #ff5d6c; font-weight: 700; margin-top: 4px; }
+  .card .actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .card .actions button { padding: 8px 16px; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 13px; }
+  .btn-approve { background: #27d17c; color: #fff; }
+  .btn-reject { background: #ff5d6c; color: #fff; }
+  .btn-repay { background: #ffd54f; color: #1a0a1a; }
+  .btn-writeoff { background: #8a5aff; color: #fff; }
+  .form-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .form-row input, .form-row select { flex: 1; min-width: 120px; padding: 10px; background: #1a0a1a; color: #e0d0e0; border: 1px solid #5a4a6a; border-radius: 6px; font-size: 14px; }
+  .form-row button { padding: 10px 20px; background: #ff7eb8; color: #1a0a1a; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 14px; }
+  .form-row button:disabled { background: #5a4a6a; color: #8a7a9a; cursor: not-allowed; }
+  .empty { text-align: center; color: #6a5a6a; padding: 30px 0; font-size: 13px; }
+  .status-pending { color: #ffd54f; }
+  .status-active { color: #27d17c; }
+  .status-repaid { color: #8a7a9a; }
+  .status-rejected, .status-overdue { color: #ff5d6c; }
+  .status-written_off { color: #8a5aff; }
+  #msg { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #ff7eb8; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #ff7eb8; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
+  #msg.show { opacity: 1; }
+  #msg.fail { color: #ff5d6c; border-color: #ff5d6c; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🏦 贷款中心</h1>
+  <div id="balance">余额加载中…</div>
+</header>
+<div class="tabs">
+  <button class="tab active" data-tab="apply">申请贷款</button>
+  <button class="tab" data-tab="my">我的贷款</button>
+  <button class="tab" data-tab="admin" id="admin-tab" style="display:none">超管审批</button>
+</div>
+<div class="panel active" id="panel-apply">
+  <div class="card">
+    <h3>申请贷款</h3>
+    <div class="meta">上限 50000🍊 · 日息 0.1% · 期限 = 3 + 借款额 × 27 ÷ 50000 天</div>
+    <div class="form-row"><input id="f-amount" type="number" placeholder="借款额（1-50000🍊）" min="1" max="50000"></div>
+    <div class="form-row"><input id="f-reason" placeholder="用途（可选，200 字内）" maxlength="200"></div>
+    <div class="form-row"><button id="btn-apply">提交申请</button></div>
+  </div>
+</div>
+<div class="panel" id="panel-my"><div class="empty">加载中…</div></div>
+<div class="panel" id="panel-admin"><div class="empty">加载中…</div></div>
+<div id="msg"></div>
+<script>
+const token = localStorage.getItem("token");
+if (!token) location.href = "/";
+const socket = io({ auth: { token } });
+let isSuper = false;
+let myName = null;
+
+function toast(m, fail) { const t = document.getElementById("msg"); t.textContent = m; t.className = fail ? "show fail" : "show"; setTimeout(() => { t.className = ""; }, 2500); }
+function esc(s) { return String(s || "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+function fmtTime(ts) { return new Date(ts).toLocaleString("zh-CN"); }
+function fmtStatus(s) { return {"pending":"待审批","active":"还款中","repaid":"已还清","rejected":"已拒绝","written_off":"已核销","overdue":"已逾期"}[s] || s; }
+
+async function loadMe() {
+  try {
+    const r = await fetch("/api/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
+    const d = await r.json();
+    if (d.ok) { myName = d.username; isSuper = !!d.isSuperAdmin; document.getElementById("admin-tab").style.display = isSuper ? "inline-block" : "none"; }
+  } catch (e) {}
+  try {
+    const r = await fetch("/api/lobster/balance", { headers: { Authorization: token } });
+    const d = await r.json();
+    if (d.ok) document.getElementById("balance").textContent = "余额：" + d.oranges + " 🍊";
+  } catch (e) {}
+}
+
+async function loadMy() {
+  const r = await fetch("/api/loan/my", { headers: { Authorization: token } });
+  const d = await r.json();
+  if (!d.ok) return;
+  const el = document.getElementById("panel-my");
+  const loans = d.loans || [];
+  if (loans.length === 0) { el.innerHTML = "<div class=\"empty\">你还没有贷款记录</div>"; return; }
+  el.innerHTML = loans.map(l => {
+    const repayBtn = (l.status === "active") ? "<button class=\"btn-repay\" data-id=\"" + l.id + "\">还款 " + Math.ceil(l.owed) + "🍊</button>" : "";
+    return "<div class=\"card\"><h3>" + esc(l.id) + "</h3>" +
+      "<div class=\"meta\">借款 " + l.amount + "🍊 · 期限 " + l.termDays + " 天 · 已借 " + l.actualDays + " 天</div>" +
+      "<div class=\"amount\">本金 " + l.amount + "🍊</div>" +
+      (l.status === "active" ? "<div class=\"owed\">应还 " + Math.ceil(l.owed) + "🍊（利息 " + l.interest + " + 逾期罚息 " + l.overduePenalty + "）</div>" : "") +
+      "<div class=\"meta\">状态：<span class=\"status-" + l.status + "\">" + fmtStatus(l.status) + "</span></div>" +
+      "<div class=\"actions\">" + repayBtn + "</div>" +
+    "</div>";
+  }).join("");
+  el.querySelectorAll(".btn-repay").forEach(btn => { btn.onclick = () => doRepay(btn.dataset.id); });
+}
+
+async function doRepay(id) {
+  if (!confirm("确认还款？")) return;
+  const r = await fetch("/api/loan/repay/" + id, { method: "POST", headers: { Authorization: token } });
+  const d = await r.json();
+  if (d.ok) { toast("还清 " + d.owed.toFixed(2) + "🍊（利息 " + d.interest.toFixed(2) + "）"); loadMe(); loadMy(); loadAdmin(); } else toast(d.msg || "还款失败", true);
+}
+
+async function loadAdmin() {
+  if (!isSuper) return;
+  const r = await fetch("/api/loan/list", { headers: { Authorization: token } });
+  const d = await r.json();
+  if (!d.ok) return;
+  const el = document.getElementById("panel-admin");
+  const loans = d.loans || [];
+  if (loans.length === 0) { el.innerHTML = "<div class=\"empty\">暂无贷款记录</div>"; return; }
+  el.innerHTML = loans.map(l => {
+    let actions = "";
+    if (l.status === "pending") actions = "<button class=\"btn-approve\" data-id=\"" + l.id + "\">批准放款</button><button class=\"btn-reject\" data-id=\"" + l.id + "\">拒绝</button>";
+    else if (l.status === "active") actions = "<button class=\"btn-writeoff\" data-id=\"" + l.id + "\">核销坏账</button>";
+    return "<div class=\"card\"><h3>" + esc(l.username) + " · " + esc(l.id) + "</h3>" +
+      "<div class=\"meta\">借款 " + l.amount + "🍊 · 期限 " + l.termDays + " 天 · 已借 " + l.actualDays + " 天 · " + fmtTime(l.createdAt) + "</div>" +
+      "<div class=\"amount\">本金 " + l.amount + "🍊</div>" +
+      (l.status === "active" ? "<div class=\"owed\">应还 " + Math.ceil(l.owed) + "🍊</div>" : "") +
+      "<div class=\"meta\">状态：<span class=\"status-" + l.status + "\">" + fmtStatus(l.status) + "</span></div>" +
+      "<div class=\"actions\">" + actions + "</div>" +
+    "</div>";
+  }).join("");
+  el.querySelectorAll(".btn-approve").forEach(btn => { btn.onclick = () => adminOp("approve", btn.dataset.id); });
+  el.querySelectorAll(".btn-reject").forEach(btn => { btn.onclick = () => adminOp("reject", btn.dataset.id); });
+  el.querySelectorAll(".btn-writeoff").forEach(btn => { btn.onclick = () => adminOp("writeoff", btn.dataset.id); });
+}
+
+async function adminOp(kind, id) {
+  const label = {"approve":"批准放款","reject":"拒绝","writeoff":"核销"}[kind];
+  if (!confirm("确认" + label + "？")) return;
+  const r = await fetch("/api/loan/" + kind + "/" + id, { method: "POST", headers: { Authorization: token } });
+  const d = await r.json();
+  if (d.ok) { toast(label + "成功"); loadAdmin(); loadMy(); } else toast(d.msg || "操作失败", true);
+}
+
+document.getElementById("btn-apply").onclick = async function() {
+  const amount = Number(document.getElementById("f-amount").value);
+  const reason = document.getElementById("f-reason").value.trim();
+  if (!amount || amount < 1 || amount > 50000) return toast("借款额 1-50000🍊", true);
+  const r = await fetch("/api/loan/apply", { method: "POST", headers: { Authorization: token, "Content-Type": "application/json" }, body: JSON.stringify({ amount, reason }) });
+  const d = await r.json();
+  if (d.ok) { toast("申请已提交，等超管审批"); document.getElementById("f-amount").value = ""; document.getElementById("f-reason").value = ""; switchTab("my"); loadMy(); loadAdmin(); } else toast(d.msg || "申请失败", true);
+};
+
+function switchTab(name) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + name));
+  if (name === "my") loadMy();
+  if (name === "admin") loadAdmin();
+}
+
+document.querySelectorAll(".tab").forEach(t => { t.onclick = () => switchTab(t.dataset.tab); });
+
+socket.on("loan_applied", (e) => { toast(e.displayName + " 申请借 " + e.amount + "🍊"); if (isSuper) loadAdmin(); });
+socket.on("loan_approved", (e) => { toast("贷款 " + e.username + " 已放款 " + e.amount + "🍊"); loadMy(); if (isSuper) loadAdmin(); });
+socket.on("loan_repaid", (e) => { toast(e.username + " 还清 " + e.owed.toFixed(2) + "🍊"); loadMy(); if (isSuper) loadAdmin(); });
+
+loadMe().then(() => { loadMy(); if (isSuper) loadAdmin(); });
+setInterval(loadMy, 15000);
+</script>
+</body>
+</html>

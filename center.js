@@ -158,4 +158,9 @@ module.exports = function mountAllFeatures(app, io, ctx) {
     setupGarden(app, ctx);
   } catch (e) { console.error("❌ [菜园] 挂载失败:", e.message); }
 
+  try {
+    const setupLoan = require("./loan-router");
+    setupLoan(app, ctx);
+  } catch (e) { console.error("❌ [贷款] 挂载失败:", e.message); }
+
 };
