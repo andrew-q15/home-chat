@@ -153,4 +153,9 @@ module.exports = function mountAllFeatures(app, io, ctx) {
     setupAuction(app, ctx);
   } catch (e) { console.error("❌ [拍卖] 挂载失败:", e.message); }
 
+  try {
+    const setupGarden = require("./garden-router");
+    setupGarden(app, ctx);
+  } catch (e) { console.error("❌ [菜园] 挂载失败:", e.message); }
+
 };
