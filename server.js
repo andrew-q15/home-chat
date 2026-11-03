@@ -2515,6 +2515,7 @@ setInterval(fetchIntelFromInternet, 2 * 60 * 1000);
 const setupSnakeRouter = require('./snake-router');
 setupSnakeRouter(io, {});
 
+const isAIBusy = () => !!(chatState.running || isChecking);
 const mountAllFeatures = require('./center');
 mountAllFeatures(app, io, {
   tokens, state, saveState, tokenTimes,
@@ -2526,6 +2527,9 @@ mountAllFeatures(app, io, {
   AVATAR_DIR, UPLOAD_DIR,
   handleCommand, kickUser, broadcastToUser, nameToSockets,
   FOOD_DICT,
+  isAIBusy,
+  callAI,
+  config,
 });
 const PORT = 3000;
 server.listen(PORT, '127.0.0.1', () => {
