@@ -163,4 +163,9 @@ module.exports = function mountAllFeatures(app, io, ctx) {
     setupLoan(app, ctx);
   } catch (e) { console.error("❌ [贷款] 挂载失败:", e.message); }
 
+  try {
+    const setupNightAI = require("./night-ai-router");
+    setupNightAI(app, ctx);
+  } catch (e) { console.error("❌ [夜间AI] 挂载失败:", e.message); }
+
 };

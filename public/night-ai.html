@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌙 夜间 AI 调度</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: radial-gradient(circle at 20% 10%, #0a0a1a 0%, #05050a 55%, #010102 100%); color: #d0d0e0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", monospace; min-height: 100vh; padding: 16px; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+  h1 { font-size: 22px; color: #7eb8ff; letter-spacing: 2px; text-shadow: 0 0 12px rgba(126,184,255,.55); }
+  .section-title { font-size: 16px; color: #7eb8ff; margin: 16px 0 10px; border-bottom: 1px solid rgba(126,184,255,.2); padding-bottom: 4px; }
+  .card { background: linear-gradient(160deg, rgba(20,20,40,.92), rgba(10,10,20,.92)); border: 1px solid rgba(126,184,255,.25); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .card h3 { color: #7eb8ff; font-size: 16px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+  .card .meta { font-size: 12px; color: #8a8a9a; margin-bottom: 4px; }
+  .card .status-ok { color: #27d17c; }
+  .card .status-err { color: #ff5d6c; }
+  .form-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .form-row input, .form-row textarea { flex: 1; min-width: 160px; padding: 10px; background: #0a0a1a; color: #d0d0e0; border: 1px solid #5a5a7a; border-radius: 6px; font-size: 14px; font-family: inherit; outline: none; }
+  .form-row textarea { resize: vertical; min-height: 60px; }
+  .form-row input:focus, .form-row textarea:focus { border-color: #7eb8ff; }
+  .form-row button { padding: 10px 20px; background: #7eb8ff; color: #0a0a1a; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 14px; }
+  .form-row button:disabled { background: #5a5a7a; color: #8a8a9a; cursor: not-allowed; }
+  .btn-danger { background: #ff5d6c !important; color: #fff !important; }
+  .empty { text-align: center; color: #6a6a7a; padding: 20px 0; font-size: 13px; }
+  #msg { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #7eb8ff; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #7eb8ff; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
+  #msg.show { opacity: 1; }
+  #msg.fail { color: #ff5d6c; border-color: #ff5d6c; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🌙 夜间 AI 调度</h1>
+  <div>
+    <button id="btn-run" class="form-row button" style="padding:8px 16px;background:#ffd54f;color:#0a0a1a;border:none;border-radius:6px;cursor:pointer;font-weight:700;">⚡ 立即手动触发所有任务</button>
+    <a href="/" style="color:#8a8a9a;text-decoration:none;font-size:14px;margin-left:16px;">← 返回聊天室</a>
+  </div>
+</header>
+<div class="section-title">注册新任务（仅超管）</div>
+<div class="card">
+  <div class="form-row">
+    <input id="f-id" placeholder="任务ID（英文小写，如 fish-talk）" maxlength="30">
+    <input id="f-name" placeholder="任务名称（如 鱼塘骚话）" maxlength="50">
+  </div>
+  <div class="form-row">
+    <input id="f-prompt" placeholder="AI 提示词，如：生成10条鱼塘鱼说的骚话，每行一条" maxlength="500">
+  </div>
+  <div class="form-row">
+    <input id="f-out" placeholder="输出文件名（如 fish-talk.json）" maxlength="50" value="night-output.json">
+    <input id="f-count" type="number" placeholder="生成条数" value="10" min="1" max="100">
+  </div>
+  <div class="form-row">
+    <input id="f-secret" type="password" placeholder="超管密码（二次验证）">
+    <button id="btn-register">注册任务</button>
+  </div>
+</div>
+<div class="section-title">已注册的任务</div>
+<div id="task-list"><div class="empty">加载中…</div></div>
+<div class="section-title">最近执行历史（30 条）</div>
+<div id="history-list"><div class="empty">加载中…</div></div>
+<div id="msg"></div>
+<script>
+const token = localStorage.getItem("token");
+if (!token) location.href = "/";
+
+function toast(m, fail) { const t = document.getElementById("msg"); t.textContent = m; t.className = fail ? "show fail" : "show"; setTimeout(() => { t.className = ""; }, 3000); }
+function esc(s) { return String(s || "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+function fmtTime(ts) { return ts ? new Date(ts).toLocaleString("zh-CN") : "从未运行"; }
+
+async function loadStatus() {
+  try {
+    const r = await fetch("/api/night-ai/status", { headers: { Authorization: token } });
+    const d = await r.json();
+    if (!d.ok) return toast(d.msg || "加载失败", true);
+    
+    // 渲染任务列表
+    const tEl = document.getElementById("task-list");
+    const tasks = d.tasks || [];
+    if (tasks.length === 0) {
+      tEl.innerHTML = "<div class=\"empty\">暂无注册任务，请在下方注册</div>";
+    } else {
+      tEl.innerHTML = tasks.map(t => {
+        const resultHtml = t.lastError 
+          ? `<span class="status-err">❌ 失败：${esc(t.lastError)}</span>`
+          : (t.lastResult ? `<span class="status-ok">✅ ${esc(t.lastResult)}</span>` : "未运行");
+        return `
+          <div class="card">
+            <h3>${esc(t.name)} <span style="font-size:12px;color:#8a8a9a;font-weight:normal;">ID: ${esc(t.id)}</span></h3>
+            <div class="meta">输出：${esc(t.outputFile)} | 条数：${t.count}</div>
+            <div class="meta">提示词：${esc(t.prompt)}</div>
+            <div class="meta" style="margin-top:8px;">上次运行：${fmtTime(t.lastRun)} | 结果：${resultHtml}</div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    // 渲染历史记录
+    const hEl = document.getElementById("history-list");
+    const history = d.history || [];
+    if (history.length === 0) {
+      hEl.innerHTML = "<div class=\"empty\">暂无执行记录</div>";
+    } else {
+      hEl.innerHTML = history.map(h => {
+        const isErr = !!h.error;
+        const msg = isErr ? `❌ 失败：${esc(h.error)}` : `✅ ${esc(h.result)}`;
+        return `
+          <div class="card" style="padding:10px 16px; margin-bottom:6px;">
+            <div class="meta">${fmtTime(h.time)} · 任务：<b>${esc(h.taskId)}</b> · 结果：<span class="${isErr ? 'status-err' : 'status-ok'}">${msg}</span></div>
+          </div>
+        `;
+      }).join("");
+    }
+  } catch (e) {
+    toast("网络错误：" + e.message, true);
+  }
+}
+
+document.getElementById("btn-register").onclick = async function() {
+  const id = document.getElementById("f-id").value.trim();
+  const name = document.getElementById("f-name").value.trim();
+  const prompt = document.getElementById("f-prompt").value.trim();
+  const outputFile = document.getElementById("f-out").value.trim();
+  const count = Number(document.getElementById("f-count").value);
+  const adminSecret = document.getElementById("f-secret").value;
+
+  if (!id || !name || !prompt || !outputFile || !adminSecret) return toast("请填完整所有必填项", true);
+
+  this.disabled = true; this.textContent = "注册中...";
+  try {
+    const r = await fetch("/api/night-ai/register-task", {
+      method: "POST", headers: { Authorization: token, "Content-Type": "application/json" },
+      body: JSON.stringify({ id, name, prompt, outputFile, count, adminSecret })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      toast("任务注册成功！");
+      document.getElementById("f-secret").value = ""; // 清空密码
+      loadStatus();
+    } else {
+      toast(d.msg || "注册失败", true);
+    }
+  } catch (e) {
+    toast("网络错误：" + e.message, true);
+  } finally {
+    this.disabled = false; this.textContent = "注册任务";
+  }
+};
+
+document.getElementById("btn-run").onclick = async function() {
+  if (!confirm("确定要立即手动触发所有任务吗？（白天也会跑，用于测试）")) return;
+  this.disabled = true; this.textContent = "触发中...";
+  try {
+    const r = await fetch("/api/night-ai/run", { method: "POST", headers: { Authorization: token } });
+    const d = await r.json();
+    if (d.ok) {
+      toast(d.msg || "任务已开始执行");
+      setTimeout(loadStatus, 5000); // 5秒后刷新看结果
+    } else {
+      toast(d.msg || "触发失败", true);
+    }
+  } catch (e) {
+    toast("网络错误：" + e.message, true);
+  } finally {
+    this.disabled = false; this.textContent = "⚡ 立即手动触发所有任务";
+  }
+};
+
+loadStatus();
+setInterval(loadStatus, 15000);
+</script>
+</body>
+</html>
