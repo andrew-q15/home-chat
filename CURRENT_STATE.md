@@ -1,5 +1,5 @@
 # 🍊 橘域网最新状态快照 (给下一位 AI 的备忘录)
-生成时间: Sat Oct 31 14:28:00 CST 2026
+生成时间: Mon Nov  2 21:56:19 CST 2026
 
 ## 1. 基础架构
 - 后端: Node.js + Express + Socket.io
@@ -7,10 +7,10 @@
 
 ## 2. 当前运行状态
 ```text
-│ 155 │ chat             │ default     │ 1.0.0   │ fork    │ 97445    │ 82s    │ 0    │ online    │ 0%       │ 211.0mb  │ jianmin… │ disabled │
-│ 3   │ https-proxy      │ default     │ 1.0.0   │ fork    │ 1566     │ 7D     │ 0    │ online    │ 0%       │ 28.2mb   │ jianmin… │ disabled │
-│ 2   │ report           │ default     │ 1.0.0   │ fork    │ 41330    │ 4D     │ 32   │ online    │ 0%       │ 38.6mb   │ jianmin… │ disabled │
-│ 6   │ watchdog         │ default     │ 1.0.0   │ fork    │ 1569     │ 7D     │ 0    │ online    │ 0%       │ 33.3mb   │ jianmin… │ disabled │
+│ 15 │ chat             │ default     │ 1.0.0   │ fork    │ 79476    │ 21m    │ 0    │ online    │ 0%       │ 214.1mb  │ jianmin… │ disabled │
+│ 2  │ https-proxy      │ default     │ 1.0.0   │ fork    │ 1095     │ 25h    │ 0    │ online    │ 0%       │ 52.2mb   │ jianmin… │ disabled │
+│ 1  │ report           │ default     │ 1.0.0   │ fork    │ 1093     │ 25h    │ 0    │ online    │ 0%       │ 68.8mb   │ jianmin… │ disabled │
+│ 5  │ watchdog         │ default     │ 1.0.0   │ fork    │ 1097     │ 25h    │ 0    │ online    │ 0%       │ 58.5mb   │ jianmin… │ disabled │
 ```
 
 ## 3. 核心 API 校验
@@ -20,12 +20,14 @@
 ## 4. 前端页面清单
 achievements.html
 admin.html
+auction.html
 auto-map.html
 board.html
 bottle.html
 brightness.html
 calc.html
 calendar.html
+dashboard.html
 delta-intel.html
 doctor.html
 drop.html
@@ -34,6 +36,7 @@ fishing.html
 foodmarket.html
 fortune.html
 fps.html
+garden.html
 group.html
 guide.html
 hiking.html
@@ -44,6 +47,7 @@ join.html
 kitchen.html
 koi.html
 ledger.html
+loan.html
 lobster.html
 lottery-game.html
 lottery.html
@@ -57,6 +61,7 @@ sonar.html
 square.html
 stickman.html
 stock.html
+treasury.html
 vault.html
 vision.html
 wall.html
@@ -65,13 +70,13 @@ writing.html
 zodiac.html
 
 ## 5. 日志记录的近期重大更新
-5. **只给一键执行命令**：不要手把手教改代码，给 `cat << EOF` 或 `python3 - << PY`。
 
----
+## 2026-10-31 15:28 编程组员工 A 六张任务卡
+- quiz-router.js：每日一题 5 天去重（最近 5 个不同日期的全部题面排除）
+- quiz-compensate.js：一次性补偿脚本（组长已清，可删）
+- wall-router.js + wall.html：留言墙撤回（本人/超管），GET 返回 me，前端有权限才显示删除按钮
+- index.html：侧栏按「游戏大厅 9 / 实用工具 31 / 橘子经济 4 / 超级管理 2」重排，数据大屏进超级管理，跳蚤市场原位不动，writing-btn 去重
+- stats-router.js + dashboard.html：后端平铺返回（兼容 stats/focus 嵌套），前端字段路径对齐，四卡三焦点卡数据全通
+- market.html：删除 load() 里 myName = null 置空行，卖家能看到「下架」按钮
 
-## 6. 待办清单（后续 CEO 从这里继续）
-- [x] 锦鲤、运势、留言墙、漂流瓶、戳一戳、日历、抽签分组
-- [ ] 积分商城、赛博作业提醒、签到表情包、答题闯关
-- [ ] 赛博电台（调频调幅）、表情包合成器、聊天记录导出 PDF
-- [ ] 打地鼠、藏宝图、菜谱翻牌、段位赛、宠物对战、暗号接龙、任务链
-- [ ] 老板数据大屏（ECharts）
+- [2026-11-02 21:56] 交接文档补公司信息：Orange Network、OMZL、QD
