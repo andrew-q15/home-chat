@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📻 赛博电台</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0a0f; color: #fff; font-family: monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
+  .radio-box { background: linear-gradient(145deg, #1a1a2e, #0f0f1a); border: 2px solid #333; border-radius: 20px; padding: 30px; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.8), inset 0 0 20px rgba(0, 255, 255, 0.1); position: relative; }
+  h1 { color: #00ffcc; margin-bottom: 10px; font-size: 24px; text-shadow: 0 0 10px #00ffcc; }
+  .status { font-size: 13px; color: #888; margin-bottom: 20px; }
+  #ptt-btn { width: 150px; height: 150px; border-radius: 50%; background: linear-gradient(145deg, #333, #111); border: 4px solid #555; color: #aaa; font-size: 20px; font-weight: bold; cursor: pointer; user-select: none; display: flex; align-items: center; justify-content: center; flex-direction: column; margin: 0 auto; transition: all 0.1s; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+  #ptt-btn:active, #ptt-btn.active { background: linear-gradient(145deg, #ff0055, #990033); border-color: #ff0055; color: #fff; box-shadow: 0 0 30px #ff0055; transform: scale(0.95); }
+  #ptt-btn .icon { font-size: 40px; margin-bottom: 5px; }
+  #users-list { margin-top: 20px; text-align: left; font-size: 13px; color: #aaa; background: #000; padding: 10px; border-radius: 8px; border: 1px solid #222; height: 120px; overflow-y: auto; }
+  #users-list div { padding: 4px 0; border-bottom: 1px solid #111; }
+  #users-list .speaking { color: #00ffcc; font-weight: bold; }
+  #users-list .me { color: #ffcc00; }
+  .back-btn { position: absolute; top: 10px; left: 10px; color: #555; text-decoration: none; font-size: 20px; }
+</style>
+</head>
+<body>
+<div class="radio-box">
+  <a href="/" class="back-btn">←</a>
+  <h1>📻 赛博电台</h1>
+  <div class="status" id="status">连接中...</div>
+  
+  <div id="ptt-btn">
+    <div class="icon">🎙️</div>
+    <div>按住说话</div>
+  </div>
+
+  <div id="users-list">
+    <div style="color:#555;text-align:center;">等待加入...</div>
+  </div>
+</div>
+
+<script>
+const token = localStorage.getItem("token");
+if (!token) location.href = "/";
+const socket = io({ auth: { token } });
+const CHANNEL = "main";
+const pttBtn = document.getElementById("ptt-btn");
+const statusEl = document.getElementById("status");
+const usersEl = document.getElementById("users-list");
+
+let myStream = null;
+let peers = {}; // { socketId: RTCPeerConnection }
+const audioElements = {}; // { socketId: HTMLAudioElement }
+
+socket.on("connect", () => {
+  statusEl.textContent = "已连接，正在加入频道...";
+  socket.emit("radio_join", { channel: CHANNEL });
+});
+
+socket.on("radio_users_list", (users) => {
+  statusEl.textContent = "已加入电台，可以开始广播";
+  renderUsers(users);
+  // 这里其实不需要立刻主动建立连接，等对方开始说话推流过来再建
+});
+
+socket.on("radio_user_joined", (u) => {
+  // 有人来了，如果我在广播，我要把流推给他
+  if (myStream) {
+    console.log(u.name + " 加入了，主动推流");
+    createPeerConnection(u.socketId, true);
+  }
+});
+
+socket.on("radio_user_left", (u) => {
+  if (peers[u.socketId]) {
+    peers[u.socketId].close();
+    delete peers[u.socketId];
+  }
+  if (audioElements[u.socketId]) {
+    audioElements[u.socketId].remove();
+    delete audioElements[u.socketId];
+  }
+  removeUser(u.socketId);
+});
+
+// 收到信令
+socket.on("radio_signal", async ({ fromId, signal }) => {
+  let pc = peers[fromId];
+  if (!pc) {
+    pc = createPeerConnection(fromId, false);
+  }
+  
+  if (signal.type === "offer") {
+    await pc.setRemoteDescription(new RTCSessionDescription(signal));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    socket.emit("radio_signal", { targetId: fromId, signal: pc.localDescription });
+  } else if (signal.type === "answer") {
+    await pc.setRemoteDescription(new RTCSessionDescription(signal));
+  } else if (signal.candidate) {
+    await pc.addIceCandidate(new RTCIceCandidate(signal));
+  }
+});
+
+function createPeerConnection(targetId, isInitiator) {
+  if (peers[targetId]) return peers[targetId];
+  
+  const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+  peers[targetId] = pc;
+
+  pc.onicecandidate = (e) => {
+    if (e.candidate) {
+      socket.emit("radio_signal", { targetId, signal: e.candidate });
+    }
+  };
+
+  pc.ontrack = (e) => {
+    // 收到别人的音轨，自动播放
+    let audio = audioElements[targetId];
+    if (!audio) {
+      audio = new Audio();
+      audio.autoplay = true;
+      audioElements[targetId] = audio;
+    }
+    audio.srcObject = e.streams[0];
+    markSpeaking(targetId, true);
+    
+    // 当音频停止或断开时
+    e.streams[0].onremovetrack = () => markSpeaking(targetId, false);
+    audio.onended = () => markSpeaking(targetId, false);
+    // 简单粗暴：开播时标记，过 5 秒没新数据就取消标记，或者通过信令
+  };
+
+  if (isInitiator && myStream) {
+    myStream.getTracks().forEach(track => pc.addTrack(track, myStream));
+    pc.createOffer().then(offer => {
+      pc.setLocalDescription(offer);
+      socket.emit("radio_signal", { targetId, signal: offer });
+    });
+  }
+
+  return pc;
+}
+
+// 标记谁在说话
+const userListData = [];
+function renderUsers(users) {
+  userListData.length = 0;
+  userListData.push(...users);
+  usersEl.innerHTML = users.map(u => `<div id="user-${u.socketId}" class="${u.socketId === socket.id ? 'me' : ''}">👤 ${u.name} ${u.socketId === socket.id ? '(我)' : ''}</div>`).join("");
+}
+function removeUser(id) {
+  usersEl.innerHTML = Array.from(usersEl.children).filter(el => el.id !== "user-" + id).map(el => el.outerHTML).join("");
+}
+function markSpeaking(id, isSpeaking) {
+  const el = document.getElementById("user-" + id);
+  if (el) {
+    if (isSpeaking) el.classList.add("speaking");
+    else el.classList.remove("speaking");
+  }
+}
+
+// 按住说话
+pttBtn.addEventListener("pointerdown", async (e) => {
+  e.preventDefault();
+  if (myStream) return;
+  pttBtn.classList.add("active");
+  statusEl.textContent = "正在广播...";
+  try {
+    myStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // 给房间里所有人都发起连接
+    userListData.forEach(u => {
+      if (u.socketId !== socket.id) {
+        createPeerConnection(u.socketId, true);
+      }
+    });
+    markSpeaking(socket.id, true);
+  } catch (err) {
+    alert("无法访问麦克风: " + err.message);
+    pttBtn.classList.remove("active");
+    statusEl.textContent = "麦克风访问失败";
+  }
+});
+
+const stopBroadcast = () => {
+  if (!myStream) return;
+  pttBtn.classList.remove("active");
+  statusEl.textContent = "已加入电台，可以开始广播";
+  markSpeaking(socket.id, false);
+  
+  myStream.getTracks().forEach(track => track.stop());
+  myStream = null;
+
+  // 关闭所有连接
+  Object.keys(peers).forEach(id => {
+    peers[id].close();
+    delete peers[id];
+  });
+  peers = {};
+};
+
+pttBtn.addEventListener("pointerup", stopBroadcast);
+pttBtn.addEventListener("pointerleave", stopBroadcast);
+
+// 全局松开
+document.addEventListener("pointerup", () => {
+  if (myStream) stopBroadcast();
+});
+
+</script>
+</body>
+</html>

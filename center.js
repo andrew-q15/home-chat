@@ -168,4 +168,9 @@ module.exports = function mountAllFeatures(app, io, ctx) {
     setupNightAI(app, ctx);
   } catch (e) { console.error("❌ [夜间AI] 挂载失败:", e.message); }
 
+  try {
+    const setupRadio = require("./radio-router");
+    setupRadio(io, ctx);
+  } catch (e) { console.error("❌ [电台] 挂载失败:", e.message); }
+
 };
