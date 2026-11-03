@@ -148,20 +148,52 @@ document.getElementById("btn-register").onclick = async function() {
 
 document.getElementById("btn-run").onclick = async function() {
   if (!confirm("确定要立即手动触发所有任务吗？（白天也会跑，用于测试）")) return;
-  this.disabled = true; this.textContent = "触发中...";
+  
+  const btn = this;
+  btn.disabled = true; btn.textContent = "执行中...";
+  
   try {
     const r = await fetch("/api/night-ai/run", { method: "POST", headers: { Authorization: token } });
     const d = await r.json();
-    if (d.ok) {
-      toast(d.msg || "任务已开始执行");
-      setTimeout(loadStatus, 5000); // 5秒后刷新看结果
-    } else {
+    if (!d.ok) {
       toast(d.msg || "触发失败", true);
+      btn.disabled = false; btn.textContent = "⚡ 立即手动触发所有任务";
+      return;
     }
+    
+    toast("任务已开始后台执行，AI 生成可能需要 1~2 分钟，请稍候...");
+    loadStatus();
+    
+    // 轮询检查：每 3 秒查一次，直到看到所有任务都跑完（这里简单点，直接轮询 3 分钟）
+    let checks = 0;
+    const maxChecks = 60; // 3 分钟
+    const timer = setInterval(async () => {
+      checks++;
+      await loadStatus();
+      
+      // 如果超过了最大检查次数，或者手动中断，就停止
+      if (checks >= maxChecks) {
+        clearInterval(timer);
+        btn.disabled = false; btn.textContent = "⚡ 立即手动触发所有任务";
+        toast("等待超时，请手动刷新页面查看结果");
+      }
+    }, 3000);
+    
+    // 监听状态变化来提前停止轮询（可选，这里简单处理，给个 60 次上限）
+    // 为了简单，我们就不做深度判断了，给按钮加个“停止”功能
+    btn.textContent = "执行中... (再点一次停止等待)";
+    btn.disabled = false;
+    btn.onclick = () => {
+      clearInterval(timer);
+      btn.disabled = false; btn.textContent = "⚡ 立即手动触发所有任务";
+      loadStatus();
+      btn.onclick = document.getElementById("btn-run").onclick; // 恢复原逻辑比较麻烦，直接刷新页面最省事
+      location.reload();
+    };
+    
   } catch (e) {
     toast("网络错误：" + e.message, true);
-  } finally {
-    this.disabled = false; this.textContent = "⚡ 立即手动触发所有任务";
+    btn.disabled = false; btn.textContent = "⚡ 立即手动触发所有任务";
   }
 };
 
