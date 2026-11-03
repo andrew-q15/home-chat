@@ -171,7 +171,12 @@ socket.on("loan_applied", (e) => { toast(e.displayName + " 申请借 " + e.amoun
 socket.on("loan_approved", (e) => { toast("贷款 " + e.username + " 已放款 " + e.amount + "🍊"); loadMy(); if (isSuper) loadAdmin(); });
 socket.on("loan_repaid", (e) => { toast(e.username + " 还清 " + e.owed.toFixed(2) + "🍊"); loadMy(); if (isSuper) loadAdmin(); });
 
-loadMe().then(() => { loadMy(); if (isSuper) loadAdmin(); });
+loadMe().then(() => {
+  const params = new URLSearchParams(location.search);
+  const tab = params.get('tab');
+  if (tab === 'admin' && isSuper) { switchTab('admin'); }
+  else { loadMy(); if (isSuper) loadAdmin(); }
+});
 setInterval(loadMy, 15000);
 </script>
 </body>

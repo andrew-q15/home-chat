@@ -101,3 +101,5 @@
 - index.html：侧栏按「游戏大厅 9 / 实用工具 31 / 橘子经济 4 / 超级管理 2」重排，数据大屏进超级管理，跳蚤市场原位不动，writing-btn 去重
 - stats-router.js + dashboard.html：后端平铺返回（兼容 stats/focus 嵌套），前端字段路径对齐，四卡三焦点卡数据全通
 - market.html：删除 load() 里 myName = null 置空行，卖家能看到「下架」按钮
+
+- [2026-11-02 21:56] 交接文档补公司信息：Orange Network、OMZL、QD
