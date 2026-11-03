@@ -622,7 +622,7 @@ app.post('/api/verify', (req, res) => {
     if (!tokenTimes[token]) tokenTimes[token] = Date.now();
   }
   
-  res.json({ ok: true, username, isAdmin: !!user.isAdmin, isElderMode: !!user.isElderMode, lockElderMode: !!user.lockElderMode });
+  res.json({ ok: true, username, isAdmin: !!user.isAdmin, isSuperAdmin: !!user.isSuperAdmin, isElderMode: !!user.isElderMode, lockElderMode: !!user.lockElderMode });
 });
 
 
