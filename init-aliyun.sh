@@ -4,7 +4,7 @@ set -e
 echo "1/9 系统更新"
 dnf update -y
 echo "2/9 基础工具"
-dnf install -y git curl wget vim htop tmux firewalld nginx
+dnf install -y git curl wget vim htop tmux firewalld nginx cronie
 echo "3/9 Docker"
 curl -fsSL https://get.docker.com | bash
 systemctl enable docker
@@ -27,6 +27,7 @@ systemctl restart nginx
 echo "7/9 防火墙"
 systemctl enable firewalld
 systemctl start firewalld
+systemctl enable --now crond
 firewall-cmd --permanent --add-service=ssh
 firewall-cmd --permanent --add-service=http
 firewall-cmd --permanent --add-service=https
