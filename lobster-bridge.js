@@ -7,12 +7,17 @@ module.exports = function setupLobsterBridge(app, ctx) {
   // ctx 会传入：{ tokens, state, lobsterData, saveLobster, getBalance, ORANGE_DEFAULT }
 
   // 中间件：验证 token
+  // 说明：ctx.tokens 是 state.tokens 的浅拷贝（server.js:238），
+  // 其值是 userId（如 '1'/'mac'/'爸爸'），与 state.users 的键同源，可直接用。
   function auth(req, res, next) {
     const token = req.headers.authorization;
-    const username = ctx.tokens[token];
-    if (!username) return res.status(401).json({ ok: false, msg: '未登录' });
-    req.username = username;
-    req.user = ctx.state.users[username];
+    const userId = (ctx.tokens && ctx.tokens[token]) !== undefined
+      ? ctx.tokens[token]
+      : (ctx.state && ctx.state.tokens && ctx.state.tokens[token]);
+    if (!userId) return res.status(401).json({ ok: false, msg: '未登录' });
+    req.userId = userId;
+    req.username = userId;
+    req.user = (ctx.state && ctx.state.users && ctx.state.users[userId]) || { id: userId, name: userId };
     next();
   }
 
@@ -26,7 +31,9 @@ module.exports = function setupLobsterBridge(app, ctx) {
 
   // ============ 查我的余额 ============
   app.get('/api/lobster/balance', auth, (req, res) => {
-    const bal = ctx.getBalance(req.user.id);
+    const userId = (req.user && req.user.id) || req.username;
+    if (!userId) return res.status(401).json({ ok: false, msg: '身份异常' });
+    const bal = ctx.getBalance(userId);
     res.json({
       ok: true,
       oranges: bal.oranges,
@@ -211,7 +218,8 @@ app.post('/api/market/:id/buy', auth, (req, res) => {
   if (tax > 0) {
     try {
       const TF = path.join(__dirname, 'treasury.json');
-      const t = JSON.parse(fs.readFileSync(TF, 'utf8'));
+      let t = { oranges: 0, history: [] };
+      try { t = JSON.parse(fs.readFileSync(TF, 'utf8')); } catch (e) {}
       t.oranges = (t.oranges || 0) + tax;
       if (t.history === undefined) t.history = [];
       t.history.unshift({ time: Date.now(), type: 'tax', amount: tax, reason: '跳蚤市场交易税《' + item.title + '》', by: 'market' });

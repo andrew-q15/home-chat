@@ -204,13 +204,14 @@ module.exports = function setupPoll(io, ctx) {
     if (rp.remainCount === 1) {
       amount = rp.remaining;
     } else {
-      const max = Math.floor((rp.remaining / rp.remainCount) * 2);
-      amount = Math.floor(Math.random() * (max - 1)) + 1;
-      // 兜底保证其他人至少能抢到 1
+      const max = Math.max(1, Math.floor((rp.remaining / rp.remainCount) * 2));
+      amount = Math.floor(Math.random() * max) + 1;
+      // 保证后面每个人至少能抢到 1
       if (rp.remaining - amount < rp.remainCount - 1) {
         amount = rp.remaining - (rp.remainCount - 1);
       }
     }
+    amount = Math.max(1, Math.min(amount, rp.remaining));
     
     rp.remaining -= amount;
     rp.remainCount--;

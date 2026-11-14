@@ -9,6 +9,12 @@ const HUB_CACHE = new Map();
 const HUB_TTL = 10 * 60 * 1000; // 10 分钟缓存
 
 function hubCached(key, fn) {
+  // joke 接口每 30 秒换一个 key，Map 只增不减会内存泄漏，超限先清过期项
+  if (HUB_CACHE.size > 100) {
+    for (const [k, v] of HUB_CACHE) {
+      if (Date.now() - v.time >= HUB_TTL) HUB_CACHE.delete(k);
+    }
+  }
   const hit = HUB_CACHE.get(key);
   if (hit && Date.now() - hit.time < HUB_TTL) {
     return Promise.resolve(hit.data);
@@ -104,39 +110,8 @@ app.get('/api/hub/joke', async (req, res) => {
 });
 
 // 星座（全部 12 个）
-app.get('/api/hub/horoscope', async (req, res) => {
+app.get('/api/hub/horoscope', (req, res) => {
   return res.json({ ok: false, msg: '星座数据源暂时不可用，等找到稳定源再上线' });
-  try {
-    const data = await hubCached('horoscope', async () => {
-      const signs = [
-        { id: 'aries', name: '白羊' }, { id: 'taurus', name: '金牛' },
-        { id: 'gemini', name: '双子' }, { id: 'cancer', name: '巨蟹' },
-        { id: 'leo', name: '狮子' }, { id: 'virgo', name: '处女' },
-        { id: 'libra', name: '天秤' }, { id: 'scorpio', name: '天蝎' },
-        { id: 'sagittarius', name: '射手' }, { id: 'capricorn', name: '摩羯' },
-        { id: 'aquarius', name: '水瓶' }, { id: 'pisces', name: '双鱼' },
-      ];
-      // vvhan 一次返回 12 个
-      const r = await fetch('https://api.vvhan.com/api/horoscope');
-      const j = await r.json();
-      // 兼容不同返回格式：优先 j.data，其次 j
-      const src = j.data || j;
-      return signs.map(s => {
-        const item = src[s.id] || src[s.name] || {};
-        return {
-          name: s.name,
-          date: item.date || '',
-          all: item.all || item.fortune || '',
-          love: item.love || '',
-          work: item.work || '',
-          money: item.money || '',
-        };
-      });
-    });
-    res.json({ ok: true, horoscope: data });
-  } catch (e) {
-    res.json({ ok: false, msg: '星座暂时不可用' });
-  }
 });
 
 // 一键刷新全部

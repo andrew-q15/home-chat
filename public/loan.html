@@ -41,6 +41,7 @@
   #msg.show { opacity: 1; }
   #msg.fail { color: #ff5d6c; border-color: #ff5d6c; }
 </style>
+  <script src="/esc.js"></script>
 </head>
 <body>
 <header>
@@ -68,6 +69,7 @@
 const token = localStorage.getItem("token");
 if (!token) location.href = "/";
 const socket = io({ auth: { token } });
+window.socket = socket; // [橘域网修复] 统一暴露全局
 let isSuper = false;
 let myName = null;
 

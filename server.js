@@ -1346,30 +1346,54 @@ app.post('/api/food/loot', (req, res) => {
     orangesLeft: bal.oranges,
   });
 });
-let hotpotState = { active: [], timer: null, running: false };
-const hotpotItems = [
-  { type: 'beef', emoji: '🥩', score: 10 },
-  { type: 'potato', emoji: '🥔', score: 5 },
-  { type: 'lettuce', emoji: '🥬', score: 2 },
-  { type: 'mushroom', emoji: '🍄', score: 2 },
-  { type: 'ginger', emoji: '🫚', score: -20 },
-];
+let hotpotState = { active: [], timer: null, running: false, pot: 'red' };
+const HOTPOT_VEGGIES = ['🥬', '🥦', '🥒', '🌽', '🥔', '🍄', '🥕', '🍅'];
 function startHotpot() {
   if (hotpotState.running) return;
   hotpotState.running = true;
   hotpotState.active = [];
   io.emit('hotpot_update', hotpotState.active);
-  hotpotState.timer = setInterval(() => {
-    const now = Date.now();
-    hotpotState.active = hotpotState.active.filter(i => i.expire > now);
-    if (hotpotState.active.length < 3) {
-      const r = HOTPOT_POOL[Math.floor(Math.random() * HOTPOT_POOL.length)];
-      const info = FOOD_DICT[r] || {name:'未知', score:0};
-      hotpotState.active.push({ id: crypto.randomBytes(4).toString('hex'), x: Math.floor(Math.random()*16), y: Math.floor(Math.random()*16), emoji: r,
-        name: info.name, score: info.score, expire: now + 5000 });
-    }
-    io.emit('hotpot_update', hotpotState.active);
-  }, 2000);
+  
+  function createTimer() {
+    if (hotpotState.timer) clearInterval(hotpotState.timer);
+    const speed = hotpotState.pot === 'clear' ? 500 : 2000;
+    hotpotState.timer = setInterval(() => {
+      const now = Date.now();
+      hotpotState.active = hotpotState.active.filter(i => i.expire > now);
+      
+      // 清汤锅最多同时出 5 个（因为刷新快），红油锅最多 3 个
+      const maxItems = hotpotState.pot === 'clear' ? 5 : 3;
+      
+      if (hotpotState.active.length < maxItems) {
+        let r = '';
+        if (hotpotState.pot === 'clear') {
+          r = HOTPOT_VEGGIES[Math.floor(Math.random() * HOTPOT_VEGGIES.length)];
+        } else {
+          r = HOTPOT_POOL[Math.floor(Math.random() * HOTPOT_POOL.length)];
+        }
+        const info = FOOD_DICT[r] || {name:'未知', score:0};
+        // 如果是清汤锅，最多持续 4000 毫秒；红油锅 5000 毫秒
+        const duration = hotpotState.pot === 'clear' ? 4000 : 5000;
+        hotpotState.active.push({ id: crypto.randomBytes(4).toString('hex'), x: Math.floor(Math.random()*16), y: Math.floor(Math.random()*16), emoji: r,
+          name: info.name, score: info.score, expire: now + duration });
+      }
+      io.emit('hotpot_update', hotpotState.active);
+    }, speed);
+  }
+  
+  // 挂载全局切换方法
+  io.on('connection', (socket) => {
+    socket.on('hotpot_switch_pot', (potType) => {
+      if (potType !== 'red' && potType !== 'clear') return;
+      hotpotState.pot = potType;
+      hotpotState.active = []; // 换锅清空当前的
+      io.emit('hotpot_update', hotpotState.active);
+      io.emit('hotpot_pot_changed', potType);
+      createTimer(); // 重启计时器应用新速度
+    });
+  });
+
+  createTimer();
 }
 app.post('/api/hotpot/grab', (req, res) => {
   const username = tokens[req.headers.authorization];
@@ -2537,11 +2561,11 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log('========================================');
   console.log(`  聊天服务跑在 http://0.0.0.0:${PORT}`);
   console.log('');
-  console.log(`  管理员口令: ${state.adminSecret}`);
-  console.log(`  超级管理员口令: ${lobsterData.superAdminSecret}`);
+  // console.log(`  管理员口令: ${state.adminSecret}`);
+  // console.log(`  超级管理员口令: ${lobsterData.superAdminSecret}`);
   console.log('  在聊天框输入 /admin <口令> 即可成为管理员');
   console.log('');
-  console.log(`  设备 API 密钥: ${config.DEVICE_API_KEY}`);
+  // console.log(`  设备 API 密钥: ${config.DEVICE_API_KEY}`);
   console.log('  设备推送: POST /api/device/say');
   console.log('========================================');
   console.log('');

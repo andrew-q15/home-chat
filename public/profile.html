@@ -29,6 +29,7 @@
   #toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #38bdf8; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #38bdf8; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
   #toast.show { opacity: 1; }
 </style>
+  <script src="/esc.js"></script>
 </head>
 <body>
 <div class="header"><h1>👤 个人主页</h1><a href="/">← 返回聊天室</a></div>
@@ -38,17 +39,18 @@
 const token = localStorage.getItem('token');
 if (!token) location.href = '/';
 const urlName = new URLSearchParams(location.search).get('u');
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function toast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500); }
 async function load() {
   const endpoint = urlName ? '/api/profile/' + encodeURIComponent(urlName) : '/api/profile/me';
   try {
     const d = await fetch(endpoint, { headers: { Authorization: token } }).then(r => r.json());
-    if (!d.ok) { document.getElementById('card').innerHTML = '<div style="text-align:center;color:#94a3b8;padding:40px">' + (d.msg || '加载失败') + '</div>'; return; }
+    if (!d.ok) { document.getElementById('card').innerHTML = '<div style="text-align:center;color:#94a3b8;padding:40px">' + esc(d.msg || '加载失败') + '</div>'; return; }
     const p = d.profile;
-    const avatar = p.avatar ? '<img class="avatar" src="' + p.avatar + '">' : '<div class="avatar"></div>';
-    const title = p.title ? '<span class="title-badge">' + p.title + '</span>' : '';
+    const avatar = p.avatar ? '<img class="avatar" src="' + esc(p.avatar) + '">' : '<div class="avatar"></div>';
+    const title = p.title ? '<span class="title-badge">' + esc(p.title) + '</span>' : '';
     document.getElementById('card').innerHTML = `
-      <div class="top">${avatar}<div class="info"><div class="name">${p.displayName}${title}</div><div class="tier">${p.tier.emoji} ${p.tier.name}段位</div></div></div>
+      <div class="top">${avatar}<div class="info"><div class="name">${esc(p.displayName)}${title}</div><div class="tier">${esc(p.tier.emoji)} ${esc(p.tier.name)}段位</div></div></div>
       <div class="stats">
         <div class="stat"><div class="v">${p.oranges}</div><div class="l">橘子余额</div></div>
         <div class="stat"><div class="v">${p.totalSpent}</div><div class="l">累计消耗</div></div>

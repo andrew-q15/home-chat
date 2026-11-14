@@ -137,17 +137,14 @@ module.exports = function setupGarden(app, ctx) {
     const caught = Math.random() < STEAL_FAIL_RATE;
     if (caught) {
       const bal = getBalance(user.id);
-      if (bal.oranges >= STEAL_PENALTY) {
-        bal.oranges -= STEAL_PENALTY;
-        addOrangeLog(user.id, -STEAL_PENALTY, '偷菜被抓罚款');
-      } else {
-        bal.oranges = 0;
-        addOrangeLog(user.id, -bal.oranges, '偷菜被抓罚款（余额不足，清零）');
-      }
-      ctx.treasury.income(STEAL_PENALTY, '偷菜被抓罚款 by ' + username, 'garden');
+      // 余额不足时按实际扣除额入账，不能固定给金库加 900，否则橘子凭空变多
+      const actual = Math.min(STEAL_PENALTY, Math.max(0, bal.oranges));
+      bal.oranges -= actual;
+      addOrangeLog(user.id, -actual, '偷菜被抓罚款');
+      if (actual > 0) ctx.treasury.income(actual, '偷菜被抓罚款 by ' + username, 'garden');
       saveLobster(lobsterData);
-      io.emit('garden_steal_caught', { username, targetId, penalty: STEAL_PENALTY });
-      return res.json({ ok: true, caught: true, penalty: STEAL_PENALTY, oranges: bal.oranges, msg: '被抓了！罚款 ' + STEAL_PENALTY + '🍊 进金库' });
+      io.emit('garden_steal_caught', { username, targetId, penalty: actual });
+      return res.json({ ok: true, caught: true, penalty: actual, oranges: bal.oranges, msg: '被抓了！罚款 ' + actual + '🍊 进金库' });
     }
     const stealCount = Math.min(maturePlots.length, 3);
     const stolen = maturePlots.slice(0, stealCount);

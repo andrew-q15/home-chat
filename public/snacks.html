@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>零食展示柜</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,sans-serif;background:#0f0f1a;color:#e0e0e0;min-height:100vh;padding:16px}
+h1{text-align:center;margin-bottom:8px;font-size:1.3em}
+.tabs{display:flex;gap:8px;justify-content:center;margin-bottom:16px}
+.tab{padding:8px 20px;border-radius:20px;border:1px solid #444;background:transparent;color:#aaa;cursor:pointer;font-size:.85em}
+.tab.active{background:#ff6b6b;color:#fff;border-color:#ff6b6b}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;max-width:800px;margin:0 auto}
+.card{background:#1a1a2e;border-radius:12px;padding:14px 10px;text-align:center;border:2px solid transparent;position:relative}
+.card.common{border-color:#555}.card.rare{border-color:#4a9eff;box-shadow:0 0 8px rgba(74,158,255,.3)}.card.epic{border-color:#a855f7;box-shadow:0 0 12px rgba(168,85,247,.4)}.card.legendary{border-color:#fbbf24;box-shadow:0 0 16px rgba(251,191,36,.5)}
+.card .emoji{font-size:2.2em}.card .name{font-size:.8em;font-weight:bold;margin:4px 0}.card .rar{font-size:.65em;margin-bottom:4px}.card .rar.rare{color:#4a9eff}.card .rar.epic{color:#a855f7}.card .rar.legendary{color:#fbbf24}.card .rar.common{color:#888}
+.card .desc{font-size:.65em;color:#6bcb77;margin-bottom:8px;min-height:1.2em}
+.card .btns{display:flex;gap:4px;justify-content:center}
+.card .btns button{padding:5px 10px;border:none;border-radius:6px;font-size:.72em;cursor:pointer;color:#fff}
+.b-eat{background:#6bcb77}.b-share{background:#ff6b6b}.b-claim{background:#4a9eff}
+.craft-panel{max-width:800px;margin:0 auto 16px;background:#1a1a2e;border-radius:12px;padding:16px}
+.craft-panel h3{font-size:.9em;margin-bottom:10px;color:#ff6b6b}
+.method-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.method-btn{padding:6px 14px;border-radius:8px;border:1px solid #444;background:transparent;color:#aaa;cursor:pointer;font-size:.8em}
+.method-btn.sel{background:#ff6b6b;color:#fff;border-color:#ff6b6b}
+.ing-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.ing-item{display:flex;align-items:center;gap:2px;padding:4px 8px;background:#0f0f1a;border-radius:6px;border:1px solid #333;font-size:.8em;cursor:pointer}
+.ing-item.sel{border-color:#6bcb77;background:#1a2e1a}
+.ing-item .cnt{color:#ff6b6b;font-size:.75em;margin-left:2px}
+.craft-go{padding:8px 24px;border:none;border-radius:8px;background:#ff6b6b;color:#fff;font-size:.85em;cursor:pointer;width:100%}
+.craft-go:disabled{background:#444;color:#888}
+.empty{text-align:center;color:#555;padding:40px;grid-column:1/-1}
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 24px;border-radius:8px;z-index:999;font-size:.85em;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+.buff-bar{max-width:800px;margin:0 auto 12px;display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.buff-tag{padding:4px 10px;border-radius:12px;background:#1a2e1a;font-size:.7em;color:#6bcb77;border:1px solid #6bcb77}
+.share-info{font-size:.6em;color:#888;margin-bottom:4px}
+</style>
+  <script src="/esc.js"></script>
+</head>
+<body>
+<h1>零食展示柜</h1>
+<div class="buff-bar" id="buffBar"></div>
+<div class="craft-panel">
+  <h3>加工零食</h3>
+  <div class="method-row" id="methodRow"></div>
+  <div class="ing-row" id="ingRow"><span style="color:#666;font-size:.8em">加载库存中...</span></div>
+  <button class="craft-go" id="craftBtn" disabled onclick="doCraft()">选择加工方式和食材</button>
+</div>
+<div class="tabs">
+  <button class="tab active" onclick="sw('mine')">我的柜子</button>
+  <button class="tab" onclick="sw('feed')">群聊分享</button>
+</div>
+<div class="grid" id="grid"></div>
+<div class="toast" id="toast"></div>
+<script>
+var TK=localStorage.getItem('token')||'';
+var tab='mine',method='',selIngs=[],myInv={};
+var methods=['慢烤','风干','冷冻','腌制','油炸'];
+function toast(m){var t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2500)}
+function rl(r){return{common:'普通',rare:'稀有',epic:'史诗',legendary:'传说'}[r]||r}
+
+function renderMethods(){
+  document.getElementById('methodRow').innerHTML=methods.map(function(m){return '<button class="method-btn'+(m===method?' sel':'')+'" onclick="pickMethod(\''+m+'\')">'+m+'</button>'}).join('');
+}
+function pickMethod(m){method=m;selIngs=[];renderMethods();renderIngs();updBtn()}
+function renderIngs(){
+  var keys=Object.keys(myInv);
+  if(!keys.length){document.getElementById('ingRow').innerHTML='<span style="color:#666;font-size:.8em">库存空空，去抽奖或买食材</span>';return}
+  document.getElementById('ingRow').innerHTML=keys.map(function(k){
+    var cnt=selIngs.filter(function(x){return x===k}).length;
+    return '<span class="ing-item'+(cnt>0?' sel':'')+'" onclick="toggleIng(\''+k+'\')">'+k+' <span class="cnt">x'+myInv[k]+(cnt>0?' 已选'+cnt:'')+'</span></span>';
+  }).join('');
+}
+function toggleIng(k){
+  var used=selIngs.filter(function(x){return x===k}).length;
+  if(used<myInv[k]) selIngs.push(k);
+  else selIngs.splice(selIngs.indexOf(k),1);
+  renderIngs();updBtn();
+}
+function updBtn(){
+  var b=document.getElementById('craftBtn');
+  if(!method){b.disabled=true;b.textContent='选择加工方式';return}
+  if(!selIngs.length){b.disabled=true;b.textContent='选择食材';return}
+  b.disabled=false;b.textContent='加工 ('+method+' '+selIngs.join('')+')';
+}
+function doCraft(){
+  fetch('/api/snacks/craft',{method:'POST',headers:{'Content-Type':'application/json',Authorization:TK},body:JSON.stringify({method:method,ingredients:selIngs})})
+  .then(function(r){return r.json()}).then(function(d){
+    toast(d.msg||'完成');if(d.ok){selIngs=[];loadInv();renderIngs();updBtn();loadSnacks();loadBuffs()}
+  });
+}
+function loadInv(){
+  fetch('/api/snacks/my-inventory',{headers:{Authorization:TK}}).then(function(r){return r.json()}).then(function(d){if(d.ok){myInv=d.inventory;renderIngs()}});
+}
+function loadBuffs(){
+  fetch('/api/snacks/buffs',{headers:{Authorization:TK}}).then(function(r){return r.json()}).then(function(d){
+    var bar=document.getElementById('buffBar');
+    if(d.buffs&&d.buffs.length){bar.innerHTML=d.buffs.map(function(b){return '<span class="buff-tag">'+b.desc+'</span>'}).join('')}else{bar.innerHTML=''}
+  });
+}
+function loadSnacks(){
+  var url=tab==='mine'?'/api/snacks/mine':'/api/snacks/feed';
+  fetch(url,{headers:{Authorization:TK}}).then(function(r){return r.json()}).then(function(d){
+    var g=document.getElementById('grid');
+    if(tab==='mine'){
+      if(!d.snacks||!d.snacks.length){g.innerHTML='<div class="empty">柜子空空的，去加工零食吧</div>';return}
+      g.innerHTML=d.snacks.map(function(s){return '<div class="card '+s.rarity+'"><div class="emoji">'+s.emoji+'</div><div class="name">'+s.name+'</div><div class="rar '+s.rarity+'">'+rl(s.rarity)+'</div><div class="desc">'+(s.desc||'')+'</div><div class="btns"><button class="b-eat" onclick="eat(\''+s.id+'\')">吃</button><button class="b-share" onclick="shareFeed(\''+s.id+'\')">分享到群聊</button></div></div>'}).join('');
+    }else{
+      if(!d.feed||!d.feed.length){g.innerHTML='<div class="empty">还没有人分享零食</div>';return}
+      g.innerHTML=d.feed.map(function(s){var claimed=(s.claimedBy||[]).length;return '<div class="card '+s.rarity+'"><div class="emoji">'+s.emoji+'</div><div class="name">'+s.name+'</div><div class="rar '+s.rarity+'">'+rl(s.rarity)+'</div><div class="desc">'+(s.desc||'')+'</div><div class="share-info">'+s.sharedBy.slice(0,8)+' 分享 · '+claimed+'/5人已领</div><div class="btns"><button class="b-claim" onclick="claim(\''+s.id+'\')">领取</button></div></div>'}).join('');
+    }
+  });
+}
+function sw(t){tab=t;document.querySelectorAll('.tab').forEach(function(x,i){x.classList.toggle('active',(i===0&&t==='mine')||(i===1&&t==='feed'))});loadSnacks()}
+function eat(id){fetch('/api/snacks/eat',{method:'POST',headers:{'Content-Type':'application/json',Authorization:TK},body:JSON.stringify({snackId:id})}).then(function(r){return r.json()}).then(function(d){toast(d.msg||'吃了');if(d.ok){loadSnacks();loadBuffs()}})}
+function shareFeed(id){fetch('/api/snacks/share-to-feed',{method:'POST',headers:{'Content-Type':'application/json',Authorization:TK},body:JSON.stringify({snackId:id})}).then(function(r){return r.json()}).then(function(d){toast(d.msg||'已分享');if(d.ok)loadSnacks()})}
+function claim(id){fetch('/api/snacks/claim',{method:'POST',headers:{'Content-Type':'application/json',Authorization:TK},body:JSON.stringify({feedId:id})}).then(function(r){return r.json()}).then(function(d){toast(d.msg||'领取了');if(d.ok)loadSnacks()})}
+
+renderMethods();loadInv();loadBuffs();loadSnacks();
+setInterval(function(){loadBuffs()},30000);
+if(typeof io!=='undefined'){var s=io();s.on('snack_update',function(){loadSnacks();loadBuffs();loadInv()});s.on('snack_shared',function(){toast('群聊里有人分享零食了！');if(tab==='feed')loadSnacks()})}
+</script>
+</body>
+</html>

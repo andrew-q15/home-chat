@@ -21,6 +21,7 @@
   .plus { color: #4caf50; }
   .minus { color: #f44336; }
 </style>
+  <script src="/esc.js"></script>
 </head>
 <body>
 <div class="header">
@@ -36,6 +37,7 @@
   var token = localStorage.getItem('token');
   if (!token) { alert('未登录'); location.href = '/'; }
   var socket = io({ auth: { token } });
+window.socket = socket; // [橘域网修复] 统一暴露全局
   var potEl = document.getElementById('pot');
   var toastEl = document.getElementById('toast');
   var cells = [];

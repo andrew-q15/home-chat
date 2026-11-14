@@ -1,4 +1,5 @@
 // ============ 所有配置集中在这里 ============
+require('./atomic-fs'); // .json 写入统一走原子替换，防撕裂与并发覆盖
 module.exports = {
   // ---- 双 AI ----
   AI1: {
@@ -25,10 +26,10 @@ module.exports = {
   },
 
   // ---- 硬件设备 API ----
-  DEVICE_API_KEY: 'change-me-to-something-random',
+  DEVICE_API_KEY: process.env.DEVICE_API_KEY || '',
 
   // ---- Tailscale 外网访问 ----
   // 到 https://login.tailscale.com/settings/keys 生成一个 API Access Token（选 Write 权限）
-  // 粘贴到下面，形如 'tskey-api-xxxxx'。留空则引导页不显示密钥。
-  TS_API_TOKEN: 'tskey-api-kkAgRXGzLy11CNTRL-WEeZEftLA7aZUb9gCu5h6aRonCkiVmNe',
+  // 已从仓库移除！请吊销旧 key，改用环境变量 TS_API_TOKEN 注入后重启。
+  TS_API_TOKEN: process.env.TS_API_TOKEN || '',
 };

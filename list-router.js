@@ -61,6 +61,7 @@ const listIconStorage = multer.diskStorage({
 const listIconUpload = multer({
   storage: listIconStorage,
   limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, /\.(png|jpe?g|gif|webp|svg)$/i.test(file.originalname || '')),
 });
 
 app.post('/api/lists/:lid/icon', (req, res) => {

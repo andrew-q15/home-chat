@@ -18,6 +18,8 @@ module.exports = function setupTreasury(app, ctx) {
 
   // 通用支出：金库扣减，返回是否成功
   function spend(amount, reason, by) {
+    // 其他 router 会直接写 treasury.json，内存副本可能过期，先对齐磁盘
+    treasury.oranges = load().oranges;
     const a = Number(amount);
     if (isNaN(a) || a <= 0) return { ok: false, msg: "金额不合法" };
     if (treasury.oranges < a) return { ok: false, msg: "金库余额不足（当前 " + treasury.oranges + " 🍊）" };
@@ -28,6 +30,7 @@ module.exports = function setupTreasury(app, ctx) {
 
   // 通用收入：金库增加
   function income(amount, reason, by) {
+    treasury.oranges = load().oranges;
     const a = Number(amount);
     if (isNaN(a) || a <= 0) return { ok: false, msg: "金额不合法" };
     treasury.oranges += a;
@@ -38,6 +41,7 @@ module.exports = function setupTreasury(app, ctx) {
   ctx.treasury = { spend, income, getOranges: () => treasury.oranges, load: () => treasury, save: () => save(treasury) };
 
   app.get("/api/treasury", (req, res) => {
+    treasury.oranges = load().oranges;
     const username = tokens[req.headers.authorization];
     const user = username ? state.users[username] : null;
     const isSuper = !!(user && user.isSuperAdmin);

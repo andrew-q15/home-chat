@@ -24,6 +24,7 @@
   #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #64b5f6; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #42a5f5; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
   #toast.show { opacity: 1; }
 </style>
+  <script src="/esc.js"></script>
 </head>
 <body>
 <div class="header"><h1>🧠 每日一题</h1><a href="/">← 返回聊天室</a></div>
@@ -77,6 +78,7 @@ window.__submit = async function() {
   }
 };
 const socket = io({ auth: { token } });
+window.socket = socket; // [橘域网修复] 统一暴露全局
 socket.on('quiz_won', d => toast('🎉 ' + d.displayName + ' 答对，答案：' + d.answer));
 </script>
 </body>

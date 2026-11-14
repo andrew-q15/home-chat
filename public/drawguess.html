@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>🎨 你画我猜擂台 · 橘域网</title>
+<script src="/esc.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; background:#fff8f0; color:#3b2f26; font-family:-apple-system,"PingFang SC","WenQuanYi Micro Hei",sans-serif; }
+  header { background:linear-gradient(90deg,#ff9a3c,#e67e22); color:#fff; padding:14px 20px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; }
+  .badge { background:rgba(255,255,255,.22); padding:3px 10px; border-radius:20px; font-size:13px; }
+  #app { max-width:1180px; margin:16px auto; padding:0 16px; display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:16px; }
+  @media (max-width:860px) { #app { grid-template-columns:1fr; } }
+  .panel { background:#fff; border:1px solid #ffe1c2; border-radius:14px; padding:14px; box-shadow:0 2px 10px rgba(230,126,34,.08); }
+  #board { width:100%; aspect-ratio:900/560; background:#fff; border:2px dashed #ffc48a; border-radius:10px; touch-action:none; display:block; }
+  #tools { display:none; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+  .sw { width:24px; height:24px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px #ddd; cursor:pointer; }
+  button { background:#e67e22; color:#fff; border:0; border-radius:8px; padding:8px 14px; cursor:pointer; font-size:14px; }
+  button.ghost { background:#fff2e4; color:#b9600e; border:1px solid #ffc48a; }
+  input[type=text] { border:1px solid #ffc48a; border-radius:8px; padding:9px 12px; font-size:14px; outline:none; }
+  #guessWrap { display:flex; gap:8px; margin-top:12px; }
+  #guess { flex:1; }
+  #chat { height:230px; overflow-y:auto; background:#fffaf4; border-radius:10px; padding:10px; font-size:13px; line-height:1.7; }
+  #chat .sys { color:#a18066; font-size:12px; }
+  #chat b { color:#c96a12; }
+  #players { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
+  .pill { background:#fff2e4; border-radius:20px; padding:4px 10px; font-size:12px; }
+  .pill.hot { background:#e67e22; color:#fff; }
+  h2 { font-size:14px; margin:0 0 10px; color:#b9600e; }
+  .row { display:flex; gap:8px; margin-top:8px; }
+  .row input { flex:1; min-width:0; }
+  #rank div { padding:5px 0; border-bottom:1px dashed #ffe1c2; font-size:13px; }
+  .tip { color:#a18066; font-size:13px; padding:10px; }
+  #toast { position:fixed; left:50%; top:18px; transform:translateX(-50%); background:#3b2f26; color:#fff;
+    padding:10px 18px; border-radius:10px; opacity:0; transition:opacity .25s; pointer-events:none; z-index:99; font-size:14px; }
+  #toast.show { opacity:1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎨 你画我猜擂台</h1>
+  <span class="badge" id="round">等待开局</span>
+  <span class="badge" id="hint">—</span>
+  <span class="badge" id="drawer">等待玩家加入…</span>
+  <span class="badge" id="timer">—</span>
+  <a href="/" style="margin-left:auto;color:#fff;text-decoration:none;font-size:14px;">← 返回聊天室</a>
+</header>
+
+<div id="app">
+  <div>
+    <div class="panel">
+      <canvas id="board"></canvas>
+      <div id="tools">
+        <span style="font-size:13px;color:#a18066;">颜色</span>
+        <span class="sw" data-color="#3b2f26" style="background:#3b2f26"></span>
+        <span class="sw" data-color="#e67e22" style="background:#e67e22"></span>
+        <span class="sw" data-color="#e05252" style="background:#e05252"></span>
+        <span class="sw" data-color="#3a9d5d" style="background:#3a9d5d"></span>
+        <span class="sw" data-color="#3a7bd5" style="background:#3a7bd5"></span>
+        <span style="font-size:13px;color:#a18066;">粗细</span>
+        <input type="range" id="width" min="1" max="16" value="3" style="width:90px;">
+        <button class="ghost" id="clearBtn">清空画板</button>
+        <span id="answer" style="margin-left:auto;font-weight:bold;color:#c96a12;"></span>
+      </div>
+      <div id="guessWrap">
+        <input type="text" id="guess" placeholder="猜猜画的是什么，回车提交" maxlength="60">
+        <button id="guessBtn">发送</button>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:14px;">
+      <h2>💬 擂台动态</h2>
+      <div id="chat"></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel">
+      <h2>👥 在线</h2>
+      <div id="players"></div>
+      <h2 style="margin-top:14px;">🏆 擂台榜</h2>
+      <div id="rank"></div>
+    </div>
+    <div class="panel" style="margin-top:14px;">
+      <h2>✍️ 投稿自定义题词</h2>
+      <div style="font-size:12px;color:#a18066;line-height:1.6;">具体、可画、不含人名隐私。本地黑名单必过，AI 复审超时会自动降级，不阻塞投稿。</div>
+      <div class="row">
+        <input type="text" id="newWord" placeholder="例如：旋转木马" maxlength="12">
+        <button id="addWord">投稿</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/invite.js"></script>
+<script>
+// 不重新声明 esc（避免与 /esc.js 或任何页面级声明冲突），只补兜底
+window.esc = window.esc || function (s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+  });
+};
+const $ = function (id) { return document.getElementById(id); };
+function toast(m) {
+  const t = $('toast'); t.textContent = m; t.classList.add('show');
+  setTimeout(function () { t.classList.remove('show'); }, 2600);
+}
+
+const token = localStorage.getItem('token');
+if (!token) $('app').innerHTML = '<div class="tip">请先登录橘域网再来玩 🍊</div>';
+const socket = io({ auth: { token: token } });
+window.socket = socket;   // /invite.js 依赖，和 stickman.html 一致
+
+const W = 900, H = 560;
+const cv = $('board'), cx = cv.getContext('2d');
+cv.width = W; cv.height = H;
+let isDrawer = false, drawing = false, last = null, color = '#e67e22', width = 3, lastSend = 0;
+
+function seg(s) {
+  cx.strokeStyle = s.color; cx.lineWidth = s.width; cx.lineCap = 'round';
+  cx.beginPath(); cx.moveTo(s.x1, s.y1); cx.lineTo(s.x2, s.y2); cx.stroke();
+}
+function clearBoard() { cx.clearRect(0, 0, W, H); }
+function pos(e) {
+  const r = cv.getBoundingClientRect();
+  return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
+}
+cv.addEventListener('pointerdown', function (e) {
+  if (!isDrawer) return;
+  drawing = true; last = pos(e);
+  try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+});
+cv.addEventListener('pointermove', function (e) {
+  if (!isDrawer || !drawing || !last) return;
+  const p = pos(e), now = Date.now();
+  if (now - lastSend < 24) return;
+  lastSend = now;
+  const s = { x1: last.x, y1: last.y, x2: p.x, y2: p.y, color: color, width: width };
+  seg(s); socket.emit('dg:stroke', s); last = p;
+});
+['pointerup','pointercancel','pointerleave'].forEach(function (ev) {
+  cv.addEventListener(ev, function () { drawing = false; last = null; });
+});
+
+function render(s) {
+  if (!s) return;
+  $('round').textContent = '第 ' + (s.roundNo || 0) + ' 轮';
+  $('hint').textContent = s.hint || '等待开局…';
+  $('drawer').textContent = s.drawerName ? ('画手：' + s.drawerName) : '等待玩家加入…';
+  isDrawer = !!(s.drawerId && s.drawerId === socket.id);
+  $('tools').style.display = isDrawer ? 'flex' : 'none';
+  $('guessWrap').style.display = isDrawer ? 'none' : 'flex';
+  $('players').innerHTML = (s.players || []).map(function (p) {
+    return '<span class="pill' + (p.id === s.drawerId ? ' hot' : '') + '">' +
+      esc(p.name) + ' · ' + (p.wins || 0) + '胜</span>';
+  }).join('');
+  clearInterval(window.__dgTimer);
+  window.__dgTimer = setInterval(function () {
+    const left = Math.max(0, Math.ceil(((s.endsAt || 0) - Date.now()) / 1000));
+    $('timer').textContent = left ? left + 's' : '—';
+  }, 500);
+}
+
+socket.on('connect', function () { socket.emit('dg:join', { token: token }); });
+socket.on('dg:error', function (d) { toast(d.msg || '出错了'); });
+socket.on('dg:snapshot', function (d) { clearBoard(); (d.strokes || []).forEach(seg); render(d.state); });
+socket.on('dg:state', render);
+socket.on('dg:round', function (s) {
+  clearBoard(); $('answer').textContent = '等待画手就绪…'; render(s);
+});
+socket.on('dg:youDraw', function (d) {
+  isDrawer = true; $('answer').textContent = '你要画：' + d.word;
+  $('tools').style.display = 'flex'; $('guessWrap').style.display = 'none';
+});
+socket.on('dg:stroke', seg);
+socket.on('dg:clear', clearBoard);
+socket.on('dg:chat', function (m) {
+  const div = document.createElement('div');
+  if (m.type === 'sys') { div.className = 'sys'; div.textContent = m.text; }
+  else { div.innerHTML = '<b>' + esc(m.name) + '</b>：' + esc(m.text); }
+  $('chat').appendChild(div); $('chat').scrollTop = $('chat').scrollHeight;
+});
+socket.on('dg:win', function (d) { toast(d.text); });
+
+function sendGuess() {
+  const t = $('guess').value.trim();
+  if (!t) return;
+  socket.emit('dg:guess', { text: t }); $('guess').value = '';
+}
+$('guessBtn').onclick = sendGuess;
+$('guess').addEventListener('keydown', function (e) { if (e.key === 'Enter') sendGuess(); });
+$('clearBtn').onclick = function () {
+  if (!isDrawer) return;
+  clearBoard(); socket.emit('dg:clear');
+};
+document.querySelectorAll('[data-color]').forEach(function (b) {
+  b.onclick = function () { color = b.dataset.color; };
+});
+$('width').oninput = function () { width = Number(this.value) || 3; };
+
+$('addWord').onclick = function () {
+  const w = $('newWord').value.trim();
+  if (!w) return;
+  fetch('/api/drawguess/custom', {
+    method: 'POST',
+    headers: { 'Authorization': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ word: w })
+  }).then(function (r) { return r.json(); }).then(function (d) {
+    toast(d.msg || (d.ok ? '已加入词库' : '失败'));
+    if (d.ok) $('newWord').value = '';
+  }).catch(function () { toast('投稿失败，稍后再试'); });
+};
+
+function loadRank() {
+  if (!token) return;
+  fetch('/api/drawguess/rank', { headers: { Authorization: token } })
+    .then(function (r) { return r.json(); }).then(function (d) {
+      $('rank').innerHTML = (d.rank || []).length
+        ? d.rank.map(function (p, i) {
+            return '<div>' + (i + 1) + '. ' + esc(p.name) + ' · ' + p.wins + '胜 / ' + p.oranges + '🍊</div>';
+          }).join('')
+        : '<div class="tip">还没人上榜，快去猜中一局</div>';
+    }).catch(function () {});
+}
+loadRank(); setInterval(loadRank, 15000);
+</script>
+</body>
+</html>

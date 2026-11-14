@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>📊 老板数据大屏 · 橘域网</title>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js" onerror="window.__echartsFailed=true"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -46,6 +46,7 @@
     .focus { grid-template-columns: 1fr; }
   }
 </style>
+  <script src="/esc.js"></script>
 </head>
 <body>
 <header>
@@ -72,8 +73,21 @@
 </div>
 
 <script>
-const stockChart = echarts.init(document.getElementById('chart-stock'), null, { renderer: 'canvas' });
-const msgChart = echarts.init(document.getElementById('chart-msgs'), null, { renderer: 'canvas' });
+let stockChart = null, msgChart = null;
+if (typeof echarts !== 'undefined') {
+  stockChart = echarts.init(document.getElementById('chart-stock'), null, { renderer: 'canvas' });
+  msgChart = echarts.init(document.getElementById('chart-msgs'), null, { renderer: 'canvas' });
+} else {
+  // [橘域网修复] Tailscale 内网 / 自签证书环境下 CDN 常不可达，给出明确提示而不是整屏空白
+  document.addEventListener('DOMContentLoaded', function(){
+    var m = document.getElementById('meta');
+    if (m) { m.textContent = '图表库未加载：请把 echarts.min.js 放到本站静态目录'; m.style.color = '#ff8a8a'; }
+    document.querySelectorAll('.chart').forEach(function(el){
+      el.textContent = '⚠️ ECharts 未加载（CDN 不可达），请本地化 echarts.min.js';
+      el.style.cssText += ';display:flex;align-items:center;justify-content:center;color:#ff8a8a;font-size:13px;';
+    });
+  });
+}
 
 function fmt(n) {
   if (typeof n !== 'number') return '-';
@@ -81,6 +95,7 @@ function fmt(n) {
 }
 
 function renderStock(stocks) {
+  if (!stockChart) return; // [橘域网修复] 图表库缺失时跳过
   if (!Array.isArray(stocks) || stocks.length === 0) {
     stockChart.setOption({ title: { text: '暂无股票数据', left: 'center', top: 'middle', textStyle: { color: '#5a7699', fontSize: 13 } } }, true);
     return;
@@ -102,6 +117,7 @@ function renderStock(stocks) {
 }
 
 function renderMsgs(buckets) {
+  if (!msgChart) return; // [橘域网修复] 图表库缺失时跳过
   const labels = [];
   const now = new Date();
   for (let i = 23; i >= 0; i--) {
@@ -197,8 +213,8 @@ load();
 setInterval(load, 30000);
 
 window.addEventListener('resize', () => {
-  stockChart.resize();
-  msgChart.resize();
+  if (stockChart) stockChart.resize();
+  if (msgChart) msgChart.resize();
 });
 </script>
 </body>

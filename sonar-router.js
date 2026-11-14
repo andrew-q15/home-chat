@@ -25,7 +25,10 @@ module.exports = function setupSonar(app, ctx) {
     if (!username) return res.status(401).json({ ok: false });
     const user = state.users[username];
     if (!user) return res.status(401).json({ ok: false });
-    const strokes = (req.body && req.body.strokes) || [];
+    const raw = Array.isArray(req.body && req.body.strokes) ? req.body.strokes : [];
+    const strokes = raw.slice(0, 200)
+      .map(s => ({ points: Array.isArray(s && s.points) ? s.points.slice(0, 500) : [] }))
+      .filter(s => s.points.length >= 2);
     sonarData.rooms[user.id] = { strokes, updatedAt: Date.now() };
     save(sonarData);
     res.json({ ok: true });

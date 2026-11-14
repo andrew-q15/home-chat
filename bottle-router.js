@@ -13,13 +13,14 @@ module.exports = function setupBottle(app, ctx) {
   app.post('/api/bottle/throw', (req, res) => {
     const username = ctx.tokens[req.headers.authorization];
     if (!username) return res.status(401).json({ ok: false });
+    const user = state.users[username] || { id: username };
     const text = String((req.body || {}).text || '').trim();
     if (!text) return res.json({ ok: false, msg: '内容不能为空' });
     if (text.length > 200) return res.json({ ok: false, msg: '最多200字' });
 
     bottles.push({
       id: 'b-' + crypto.randomBytes(4).toString('hex'),
-      text, time: Date.now(), pickedBy: []
+      text, time: Date.now(), pickedBy: [], throwerId: user.id, throwerId: user.id
     });
     if (bottles.length > 500) bottles = bottles.slice(0, 500);
     save(bottles);
@@ -31,8 +32,8 @@ module.exports = function setupBottle(app, ctx) {
     if (!username) return res.status(401).json({ ok: false });
     const user = state.users[username];
     
-    // 过滤掉自己扔的，以及自己捞过的
-    const available = bottles.filter(b => !b.pickedBy.includes(user.id));
+    // 过滤掉自己扔的，以及自己捞过的（老瓶子无 throwerId，保持可捞，兼容旧数据）
+    const available = bottles.filter(b => !b.pickedBy.includes(user.id) && b.throwerId !== user.id);
     if (available.length === 0) return res.json({ ok: false, msg: '海里没有漂流瓶了' });
 
     const picked = available[Math.floor(Math.random() * available.length)];

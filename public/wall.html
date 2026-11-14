@@ -24,6 +24,7 @@
   #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #e94560; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #e94560; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
   #toast.show { opacity: 1; }
 </style>
+  <script src="/esc.js"></script>
 </head>
 <body>
 <div class="header"><h1>🧱 匿名留言墙</h1><a href="/">← 返回聊天室</a></div>
@@ -40,8 +41,18 @@ function toast(m) { const t = document.getElementById('toast'); t.textContent = 
 let myId = localStorage.getItem('user_id') || '';
 
 async function load() {
-  const d = await fetch('/api/wall', { headers: { Authorization: token } }).then(r => r.json());
-  if (!d.ok) return;
+  const listEl = document.getElementById('list');
+  if (!token) {
+    listEl.innerHTML = '<div style="text-align:center; padding:20px;">请先登录后再查看留言墙</div>';
+    return;
+  }
+  try {
+    const res = await fetch('/api/wall', { headers: { Authorization: token } });
+    const d = await res.json();
+    if (!d.ok) {
+      listEl.innerHTML = '<div style="text-align:center; padding:20px; color:#ff5d6c;">加载失败：' + (d.msg || '未知错误') + '</div>';
+      return;
+    }
   const me = d.me || null;
   const canDelete = (w) => me && (me.isSuperAdmin || (w.userId && w.userId === me.userId) || (w.author && w.author === me.username));
   document.getElementById('list').innerHTML = d.wall.map(w => {
@@ -60,6 +71,10 @@ async function load() {
       </div>
     </div>`;
   }).join('');
+  } catch (e) {
+    listEl.innerHTML = '<div style="text-align:center; padding:20px; color:#ff5d6c;">网络错误，请刷新重试</div>';
+    console.error('留言墙加载失败:', e);
+  }
 }
 
 window.__post = async function() {
@@ -96,6 +111,7 @@ window.__del = async function(id) {
 };
 
 const socket = io({ auth: { token } });
+window.socket = socket; // [橘域网修复] 统一暴露全局
 socket.on('wall_new', () => load());
 socket.on('wall_deleted', () => load());
 load();

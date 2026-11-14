@@ -9,7 +9,8 @@ module.exports = function setupEventsRouter(app, ctx) {
     if (!username) return res.status(401).json({ ok: false, msg: '未登录' });
     const user = ctx.state.users[username];
 
-    const today = new Date().toISOString().slice(0, 10);
+    const _d = new Date();
+    const today = _d.getFullYear() + '-' + String(_d.getMonth() + 1).padStart(2, '0') + '-' + String(_d.getDate()).padStart(2, '0');
     const last = user.lastCheckIn;
     
     if (last === today) return res.json({ ok: false, msg: '今天已经签过啦，明天再来！' });

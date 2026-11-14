@@ -24,6 +24,7 @@
   #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #ffd54f; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #ffd54f; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
   #toast.show { opacity: 1; }
 </style>
+  <script src="/esc.js"></script>
 </head>
 <body>
 <div class="header"><h1>🎲 抽签分组</h1><a href="/">← 返回聊天室</a></div>
@@ -43,6 +44,10 @@
 const token = localStorage.getItem('token');
 if (!token) location.href = '/';
 function toast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
 
 window.__draw = async function() {
   const text = document.getElementById('names').value.trim();
@@ -67,7 +72,7 @@ window.__draw = async function() {
       document.getElementById('result').innerHTML = d.groups.map((g, i) => `
         <div class="group-card">
           <h3>第 ${i + 1} 组</h3>
-          ${g.map(name => `<div class="group-member">${name}</div>`).join('')}
+          ${g.map(name => `<div class="group-member">${esc(name)}</div>`).join('')}
         </div>
       `).join('');
     } else {

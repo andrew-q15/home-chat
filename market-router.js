@@ -1,11 +1,20 @@
+const path = require('path');
 const express = require('express');
 const crypto = require('crypto');
 
 module.exports = function setupMarket(app, ctx) {
   const { tokens, state, foodData, saveFood, getBalance, saveLobster, lobsterData } = ctx;
   
-  // 全局交易行数据
-  let foodMarket = [];
+  // 全局交易行数据：必须落盘，否则重启后「已扣食材、货架没了」
+  const FOOD_MARKET_FILE = path.join(__dirname, 'food-market.json');
+  function loadFoodMarket() {
+    try { const d = JSON.parse(fs.readFileSync(FOOD_MARKET_FILE, 'utf8')); return Array.isArray(d) ? d : []; }
+    catch (e) { return []; }
+  }
+  function saveFoodMarket() {
+    try { fs.writeFileSync(FOOD_MARKET_FILE, JSON.stringify(foodMarket, null, 2)); } catch (e) {}
+  }
+  let foodMarket = loadFoodMarket();
 
   // 获取货架
   app.get('/api/food/market', (req, res) => {
@@ -39,6 +48,7 @@ module.exports = function setupMarket(app, ctx) {
       price: p,
       time: Date.now()
     });
+    saveFoodMarket();
     res.json({ ok: true });
   });
 
@@ -71,6 +81,7 @@ module.exports = function setupMarket(app, ctx) {
     saveFood(foodData);
 
     foodMarket.splice(idx, 1);
+    saveFoodMarket();
     res.json({ ok: true });
   });
 

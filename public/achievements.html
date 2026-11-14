@@ -33,6 +33,7 @@
   #toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #ffd54f; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #ffd54f; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
   #toast.show { opacity: 1; }
 </style>
+  <script src="/esc.js"></script>
 </head>
 <body>
 <div class="header"><h1>🏆 橘子成就馆</h1><a href="/">← 返回聊天室</a></div>
@@ -94,6 +95,7 @@ async function load() {
   } catch (e) { list.innerHTML = '<div class="empty">网络错误</div>'; }
 }
 const socket = io({ auth: { token } });
+window.socket = socket; // [橘域网修复] 统一暴露全局
 socket.on('achievement_level_up', (d) => {
   toast('🏆 ' + d.username + ' 的「' + d.achievement.name + '」升到 ' + d.level.emoji + ' ' + d.level.name);
   if (currentTab === 'mine') load();

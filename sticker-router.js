@@ -116,6 +116,7 @@ const stickerStorage2 = multer.diskStorage({
 const stickerUpload2 = multer({
   storage: stickerStorage2,
   limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, /\.(png|jpe?g|gif|webp)$/i.test(file.originalname || '')),
 });
 
 app.post('/api/stickers/upload', (req, res) => {
@@ -156,7 +157,12 @@ app.post('/api/stickers/collect', (req, res) => {
   if (!url.startsWith('/uploads/') && !url.startsWith('/stickers/')) {
     return res.status(400).json({ ok: false, msg: '不支持的地址' });
   }
-  const srcPath = path.join(__dirname, 'public', url.replace(/^\//, '').split('?')[0]);
+  const publicRoot = path.resolve(__dirname, 'public');
+  const srcPath = path.resolve(publicRoot, url.replace(/^\//, '').split('?')[0]);
+  // 防 /stickers/../../data.json 这类穿越：解析后必须仍在 public 目录内
+  if (!srcPath.startsWith(publicRoot + path.sep)) {
+    return res.status(400).json({ ok: false, msg: '地址不合法' });
+  }
   if (!fs.existsSync(srcPath)) return res.status(404).json({ ok: false, msg: '文件不存在' });
 
   const d = groupDir(user.id, gid);

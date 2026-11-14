@@ -1,6 +1,12 @@
 module.exports = function mountAllFeatures(app, io, ctx) {
   console.log('  🚀 正在启动中央功能挂载系统...');
 
+  // 你画我猜擂台（实时画板 + 自定义题词审核 + 赏金结算）
+  try {
+    const setupDrawGuess = require('./drawguess-router');
+    setupDrawGuess(app, ctx);
+  } catch (e) { console.error('❌ [你画我猜擂台] 挂载失败:', e.message); }
+
   try {
     const setupStock = require('./stock-router');
     setupStock(app, ctx);
@@ -172,5 +178,15 @@ module.exports = function mountAllFeatures(app, io, ctx) {
     const setupRadio = require("./radio-router");
     setupRadio(io, ctx);
   } catch (e) { console.error("❌ [电台] 挂载失败:", e.message); }
+
+  // 📹 小湃摄像头 RTSP 流媒体服务
+  try {
+    const { app: cameraApp, server: cameraServer, CAMERA_CONFIG } = require('/Users/jianmingqu/home-chat/camera-rtsp/index');
+    // 将摄像头路由挂载到主应用（注意：不要合并 server，避免端口冲突）
+    Object.assign(app, cameraApp);
+    console.log('  📹 [小湃摄像头] 已挂载');
+  } catch (e) { 
+    console.error('❌ [小湃摄像头] 挂载失败:', e.message); 
+  }
 
 };

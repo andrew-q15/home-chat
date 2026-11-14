@@ -10,6 +10,25 @@ module.exports = function setupIntel(app, ctx) {
   let intelCooldowns = {};
   let storyCooldowns = {};
 
+  // 以下原本引用了未定义变量，任何 reward>=有效阈值 的情报都会抛 ReferenceError
+  // 与 public/guide.html 公示口径对齐：AI > 3（即 >=4）算有效，<=3 算灌水
+  const INTEL_VALID_SCORE = 4;
+  const INTEL_MEMBERS_FILE = path.join(__dirname, 'intel-members.json');
+  function loadIntelMembers() {
+    try { return JSON.parse(fs.readFileSync(INTEL_MEMBERS_FILE, 'utf8')); }
+    catch { return { members: {}, lastSettleDate: null }; }
+  }
+  function saveIntelMembers(d) {
+    try { fs.writeFileSync(INTEL_MEMBERS_FILE, JSON.stringify(d, null, 2)); } catch (e) {}
+  }
+  const intelMembers = loadIntelMembers();
+  if (!intelMembers.members) intelMembers.members = {};
+  function getIntelQuota(m) { return 3 + Math.min(5, Math.floor((m && m.level) || 0) / 2 | 0); }
+  function todayStr() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
 app.get('/api/intel/list', (req, res) => {
   res.json({ ok: true, intel: intelData });
 });
@@ -56,7 +75,7 @@ app.post('/api/intel', async (req, res) => {
 
   if (reward > 0) { getBalance(user.id).oranges += reward; saveLobster(lobsterData); }
 
-  // 情报局 KPI：有效情报（AI >= 5 分）计入今日配额
+  // 情报局 KPI：有效情报（AI >= 4 分）计入今日配额
   if (reward >= INTEL_VALID_SCORE && intelMembers.members[user.id]) {
     const m = intelMembers.members[user.id];
     const today = todayStr();

@@ -25,6 +25,7 @@
   .read-header { padding: 16px 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
   .read-body { padding: 20px; overflow-y: auto; font-size: 16px; line-height: 1.8; color: #333; white-space: pre-wrap; flex: 1; }
 </style>
+  <script src="/esc.js"></script>
 </head>
 <body>
 <div class="header"><h1>📖 小说中心</h1><a href="/">← 返回聊天室</a></div>
@@ -35,14 +36,24 @@ let myToken = localStorage.getItem('token');
 let myName = localStorage.getItem('username') || '';
 let published = [];
 fetch('/api/writings', { headers: { 'Authorization': myToken } }).then(r=>r.json()).then(d => { if (d.ok) { published = d.published; renderGrid(); } });
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function renderGrid() {
   const grid = document.getElementById('grid');
   if (published.length === 0) { grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#999;">还没有作品</div>'; return; }
   grid.innerHTML = published.map(p => {
     const liked = p.likes && p.likes.includes(myName);
     const totalCoins = p.coins ? p.coins.reduce((s, c) => s + c.amount, 0) : 0;
-    return `<div class="card"><h2 onclick="__read('${p.id}')">${p.title || '无标题'}</h2><div class="meta"><span>作者：${p.authorName}</span><span>${p.wordCount} 字</span></div><div class="content-preview">${p.content}</div><div class="actions"><button class="btn btn-like ${liked ? 'active' : ''}" onclick="__like('${p.id}')">${liked ? '❤️' : '🤍'} 点赞 ${p.likes ? p.likes.length : 0}</button><div style="flex:1"></div><span style="font-size:12px;color:#e67e22;font-weight:bold;">获币 ${totalCoins} 🍊</span><input type="number" class="coin-input" id="coin-${p.id}" value="10"><button class="btn btn-coin" onclick="__coin('${p.id}')">投币</button></div></div>`;
+    const pid = esc(p.id);
+    return `<div class="card"><h2 data-act="read" data-id="${pid}">${esc(p.title || '无标题')}</h2><div class="meta"><span>作者：${esc(p.authorName)}</span><span>${esc(p.wordCount)} 字</span></div><div class="content-preview">${esc(p.content)}</div><div class="actions"><button class="btn btn-like ${liked ? 'active' : ''}" data-act="like" data-id="${pid}">${liked ? '❤️' : '🤍'} 点赞 ${p.likes ? p.likes.length : 0}</button><div style="flex:1"></div><span style="font-size:12px;color:#e67e22;font-weight:bold;">获币 ${totalCoins} 🍊</span><input type="number" class="coin-input" id="coin-${pid}" value="10"><button class="btn btn-coin" data-act="coin" data-id="${pid}">投币</button></div></div>`;
   }).join('');
+  grid.querySelectorAll('[data-act]').forEach(el => {
+    el.onclick = () => {
+      const id = el.dataset.id;
+      if (el.dataset.act === 'read') window.__read(id);
+      else if (el.dataset.act === 'like') window.__like(id);
+      else if (el.dataset.act === 'coin') window.__coin(id);
+    };
+  });
 }
 window.__read = function(id) { const p = published.find(x => x.id === id); if (!p) return; document.getElementById('read-title').textContent = p.title; document.getElementById('read-content').textContent = p.content; document.getElementById('read-modal').style.display = 'flex'; };
 window.__like = function(id) { fetch('/api/writings/' + id + '/like', { method: 'POST', headers: { 'Authorization': myToken } }).then(r=>r.json()).then(d => { if (d.ok) { const p = published.find(x => x.id === id); if (p) p.likes = d.likes > (p.likes ? p.likes.length : 0) ? [...(p.likes||[]), myName] : (p.likes||[]).filter(u => u !== myName); renderGrid(); } }); };

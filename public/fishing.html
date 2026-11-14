@@ -18,6 +18,7 @@
   .res-box .text { color: #fff; font-size: 18px; font-weight: bold; margin-bottom: 20px; }
   .res-box button { background: #00FFFF; color: #000; border: none; padding: 10px 30px; border-radius: 20px; font-weight: bold; font-size: 16px; cursor: pointer; }
 </style>
+  <script src="/esc.js"></script>
 </head>
 <body>
 <canvas id="game-canvas"></canvas><div id="bubble-layer"></div>
@@ -64,6 +65,12 @@ function catchFish() {
     else alert(d.msg);
   });
 }
+</script>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  // [橘域网修复] 本页原本完全没有 socket，invite.js 的邀请功能永远拿不到连接
+  const socket = io({ auth: { token: localStorage.getItem('token') } });
+  window.socket = socket; // 与全站其它页面保持同一套挂载约定
 </script>
 <script src="/invite.js"></script>
 </body>

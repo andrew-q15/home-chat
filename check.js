@@ -24,15 +24,17 @@ function get(url) {
   });
 }
 
-// 1. Node 文件语法
-const jsFiles = ['server.js', 'lobster-bridge.js', 'lobster-runner.js', 'backup.js', 'ip-watch.js', 'morning-report.js'];
+// 1. Node 文件语法：全量扫描，不再只查 6 个
+const fs = require('fs');
+const jsFiles = fs.readdirSync(__dirname)
+  .filter(f => f.endsWith('.js') && !f.startsWith('.'))
+  .sort();
 for (const f of jsFiles) {
   try { execSync(`node --check ${f}`, { stdio: 'pipe' }); report('语法 ' + f, true); }
   catch (e) { report('语法 ' + f, false, e.stderr && e.stderr.toString().split('\n')[0]); }
 }
 
 // 2. 页面 HTML 里的 <script> 语法
-const fs = require('fs');
 for (const page of ['index.html', 'board.html', 'vision.html', 'brightness.html', 'lobster.html']) {
   const p = 'public/' + page;
   try {

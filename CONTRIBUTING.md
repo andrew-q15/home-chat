@@ -52,11 +52,13 @@ git merge task/xxx --no-ff -m "merge: 卡 N xxx"
 
 每张卡必须过：
 
-1. **语法**：`node --check` 通过。
-2. **重启 + 体检**：`verify 200`。
-3. **接口验收**：`curl` 或浏览器实测，贴输出。
-4. **回归**：相关页面打开不白屏，按钮可点。
-5. **报组长**：commit 号 + 验收输出，组长对账后才结案。
+1. **语法**：`node --check` 通过；HTML 内嵌脚本用 Node 临时文件法 `node --check`。
+2. **安全体检**：`node security-check.js` 全绿（未登录拒绝 / 密钥 / 原子写 / 橘语沙箱）。
+3. **重启 + 体检**：`bash restart-chat.sh`（幂等：在就 restart、不在才 start，末尾自动 `pm2 save`），`verify 200`。
+   **禁止 `pm2 delete chat`**：delete→start 之间会制造进程空窗，watchdog 的 `pm2 restart chat` 会报 `chat not found` 且自愈失效；若 delete 后 start 失败，chat 会长期缺席，8443 代理持续报空错误。
+4. **接口验收**：`curl` 或浏览器实测，贴输出。
+5. **回归**：相关页面打开不白屏，按钮可点。
+6. **报组长**：commit 号 + 验收输出，组长对账后才结案。
 
 ## 5. 禁区
 

@@ -232,7 +232,9 @@ const xlsx = require('xlsx');
 const pdfParse = require('pdf-parse');
 const upload_doctor_multi = multer_doctor({ dest: path.join(__dirname, 'public', 'uploads') });
 
-app.post('/api/doctor/upload-multi', upload_doctor_multi.array('files', 10), async (req, res) => {
+// 与 skill-router.js 重复注册同一路由，已停用；原实现改名留档，避免行为不确定
+app.post('/api/doctor/upload-multi', (req, res) => res.status(410).json({ ok: false, msg: '此入口已停用，请使用技能中心版' }));
+app.post('/__legacy_disabled_doctor_multi', upload_doctor_multi.array('files', 10), async (req, res) => {
   const token = req.headers.authorization;
   const username = tokens[token];
   if (!username) return res.status(401).json({ ok: false, msg: '未登录' });
@@ -328,22 +330,26 @@ app.post('/api/doctor/upload-multi', upload_doctor_multi.array('files', 10), asy
 // ============ 橘语执行引擎 API ============
 const fs_p = require('fs');
 const path_p = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
+// 安全加固：必须登录、限长、不用 shell 拼接、超时+输出上限、finally 清临时文件
 app.post('/api/orange/run', (req, res) => {
+  if (!tokens[req.headers.authorization]) return res.status(401).json({ ok: false, msg: '未登录' });
   const { code } = req.body || {};
   if (!code) return res.status(400).json({ ok: false, msg: '代码不能为空' });
+  if (String(code).length > 4000) return res.status(400).json({ ok: false, msg: '代码最多 4000 字' });
 
   const tempFile = path_p.join(__dirname, 'temp_calc_' + crypto.randomBytes(8).toString('hex') + '.orange');
-  
   try {
-    fs_p.writeFileSync(tempFile, code, 'utf-8');
-    const output = execSync(`python3 orange-lang.py ${tempFile}`, { encoding: 'utf-8', timeout: 3000 });
-    if (fs_p.existsSync(tempFile)) fs_p.unlinkSync(tempFile);
+    fs_p.writeFileSync(tempFile, String(code), 'utf-8');
+    const output = execFileSync('python3', [path_p.join(__dirname, 'orange-lang.py'), tempFile], {
+      encoding: 'utf-8', timeout: 3000, maxBuffer: 64 * 1024,
+    });
     res.json({ ok: true, output: output });
   } catch (err) {
-    if (fs_p.existsSync(tempFile)) fs_p.unlinkSync(tempFile);
     res.json({ ok: false, msg: '执行出错: ' + err.message });
+  } finally {
+    try { if (fs_p.existsSync(tempFile)) fs_p.unlinkSync(tempFile); } catch (e) {}
   }
 });
 

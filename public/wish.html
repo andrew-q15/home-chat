@@ -29,6 +29,7 @@
   #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #4dd0e1; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #00acc1; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
   #toast.show { opacity: 1; }
 </style>
+  <script src="/esc.js"></script>
 </head>
 <body>
 <div class="header"><h1>🌟 赛博许愿池</h1><a href="/">← 返回聊天室</a></div>
@@ -91,6 +92,7 @@ window.__grant = async function(id) {
   else toast('❌ ' + d.msg);
 };
 const socket = io({ auth: { token } });
+window.socket = socket; // [橘域网修复] 统一暴露全局
 socket.on('wish_new', d => { toast('🌟 ' + d.displayName + ' 许了个愿'); if (sortBy === 'new') load(); });
 socket.on('wish_granted', d => toast('🌟 ' + d.displayName + ' 的愿望显灵了！'));
 load();

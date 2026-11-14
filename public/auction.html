@@ -34,6 +34,7 @@
   #msg.show { opacity: 1; }
   .empty { text-align: center; color: #8a7aaa; padding: 40px 0; font-size: 14px; }
 </style>
+  <script src="/esc.js"></script>
 </head>
 <body>
 <header>
@@ -64,6 +65,7 @@
 const token = localStorage.getItem("token");
 if (!token) location.href = "/";
 const socket = io({ auth: { token } });
+window.socket = socket; // [橘域网修复] 统一暴露全局
 let myName = null;
 let balance = 0;
 let ongoing = [];

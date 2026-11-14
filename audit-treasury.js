@@ -1,0 +1,24 @@
+// 只读金库对账：不写任何文件
+const fs = require('fs'), path = require('path');
+const R = __dirname;
+const read = (n, f) => { try { return JSON.parse(fs.readFileSync(path.join(R, n), 'utf8')); } catch (e) { return f; } };
+const t = read('treasury.json', {}), lob = read('lobster.json', { balances: {} });
+const h = t.history || [];
+let net = 0; for (const x of h) net += Number(x.amount) || 0;
+const newestHistory = h.length ? Math.max.apply(null, h.map(x => x.time || 0)) : 0;
+const newestLoan = (t.loans || []).reduce((m, l) => Math.max(m, l.writtenOffAt || l.startAt || l.createdAt || 0), 0);
+const receivables = (t.receivables || []).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+const fmt = ts => ts ? new Date(ts).toLocaleString('zh-CN') : '无';
+console.log('=== 金库只读对账（未写盘）===');
+console.log('当前 oranges        :', t.oranges);
+console.log('history 笔数        :', h.length, '| 流水净额 :', net);
+console.log('差额(当前 - 净额)   :', (t.oranges || 0) - net, ' ← 不为 0 说明有「直接写文件未记流水」');
+console.log('history 最新时间    :', fmt(newestHistory));
+console.log('loans 最新时间      :', fmt(newestLoan));
+if (newestLoan > newestHistory) console.log('⚠️ 贷款/核销晚于最后一条流水 → 存在旁路写入，需人工补账');
+console.log('核销应收合计        :', receivables, '🍊（', (t.receivables || []).length, '笔，未收回）');
+let userTotal = 0; const bal = lob.balances || {};
+for (const uid in bal) userTotal += Number(bal[uid].oranges) || 0;
+console.log('用户余额合计        :', Math.round(userTotal * 100) / 100, '🍊');
+console.log('未结清贷款笔数      :', (t.loans || []).filter(l => l.status !== 'written_off').length);
+console.log('=== 对账结束 ===');

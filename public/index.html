@@ -860,6 +860,8 @@
     border: 1px solid #ccc; background: #f5f5f5; cursor: pointer; font-size: 14px;
   }
 </style>
+  <script src="/esc.js"></script>
+  <script src="/drawguess-entry.js"></script>
 </head>
 <body>
 
@@ -961,7 +963,7 @@
             <button id="guide-btn" onclick="window.location.href='/guide.html'" style="margin-top:8px;padding:8px 10px;background:transparent;color:#7ee787;border:1px dashed #7ee787;border-radius:6px;cursor:pointer;font-size:13px;width:100%">📖 刚进的人必看</button>
             <button id="zodiac-btn" style="display:none;margin-top:8px;padding:8px 10px;background:transparent;color:#ffd700;border:1px dashed #ffd700;border-radius:6px;cursor:pointer;font-size:13px;width:100%">🎊 十二生肖跳舞</button>
             <button id="kitchen-btn" onclick="window.location.href='/kitchen.html'" style="margin-top:8px;padding:8px 10px;background:transparent;color:#f39c12;border:1px dashed #f39c12;border-radius:6px;cursor:pointer;font-size:13px;width:100%">👨‍🍳 赛博厨房</button>
-            <button id="checkin-btn" onclick="
+  <a href="/snacks.html" style="padding:6px 12px;color:#ff6b6b;text-decoration:none;font-size:.85em">零食柜</a>            <button id="checkin-btn" onclick="
   var tk = localStorage.getItem('token');
   if(!tk) return alert('请先登录');
   fetch('/api/checkin', {method:'POST', headers:{'Authorization':tk}})
@@ -990,6 +992,11 @@
             <button id="map-btn" onclick="window.location.href='/auto-map.html'" style="margin-top:8px;padding:8px 10px;background:transparent;color:#3498db;border:1px dashed #3498db;border-radius:6px;cursor:pointer;font-size:13px;width:100%">🌐 地图与数据收集</button>
             <button id="board-btn" style="margin-top:10px;padding:8px 10px;background:transparent;color:#2a6;border:1px dashed #2a6;border-radius:6px;cursor:pointer;font-size:13px">🎨 协同白板</button>
     <script>
+    // [橘域网修复] 延迟订阅：socket 建立前排队的监听器，就绪后自动补挂
+    window.__onSocket = function(ev, fn){
+      if (window.socket) { window.socket.on(ev, fn); return; }
+      window.addEventListener('orange:socket-ready', function(){ window.socket.on(ev, fn); }, { once: true });
+    };
     (function(){
       var now = new Date();
       var y = now.getFullYear(), m = now.getMonth() + 1, d = now.getDate();
@@ -1002,7 +1009,7 @@
     })();
     
 // ===== 戳一戳特效 =====
-socket.on('poked', (data) => {
+window.__onSocket('poked', (data) => {
   if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
   let pokeDiv = document.getElementById('poke-popup');
   if (!pokeDiv) {
@@ -1023,14 +1030,14 @@ socket.on('poked', (data) => {
 
 // 全局双击监听：向上找有没有消息块，提取名字
 document.addEventListener('dblclick', (e) => {
-  const bubble = e.target.closest('.message'); // 假设聊天框的类名叫 .message
+  const bubble = e.target.closest('.msg'); // [橘域网修复] 实际 DOM 类名是 .msg
   if (!bubble) return;
   
   // 从消息块里找发信人名字（根据你的 DOM 结构来）
   const nameEl = bubble.querySelector('.message-name') || bubble.querySelector('.name');
   if (nameEl) {
     const targetName = nameEl.textContent.trim();
-    if (targetName && targetName !== state.myName) {
+    if (targetName && targetName !== myName) {
       fetch('/api/poke', {
         method: 'POST',
         headers: { 'Authorization': localStorage.getItem('token'), 'Content-Type': 'application/json' },
@@ -1041,6 +1048,9 @@ document.addEventListener('dblclick', (e) => {
     }
   }
 });
+
+
+    
 
 </script>
             
@@ -1089,7 +1099,24 @@ document.addEventListener('dblclick', (e) => {
       <button id="sun-btn" title="环境亮度探测" style="background:transparent;border:none;color:#ccc;font-size:18px;cursor:pointer;padding:4px 8px">☀</button>
       
     </div>
-    <div id="pinned-messages"></div>
+    
+<div id="patriotic-banner" onclick="hidePatrioticBanner()" style="cursor:pointer; background:#cc0000; color:#fff; text-align:center; font-weight:bold; font-size:16px; padding:8px; letter-spacing:2px; border-bottom:2px solid #ffd700; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); box-shadow: 0 2px 10px rgba(204,0,0,0.5); z-index:10;" title="点击隐藏">
+  🚫 排放核污水的日本鬼子与狗不得入内 🚫
+</div>
+<script>
+(function(){
+  var banner = document.getElementById('patriotic-banner');
+  if (!banner) return;
+  if (localStorage.getItem('hide_patriotic_banner') === '1') {
+    banner.style.display = 'none';
+  }
+  window.hidePatrioticBanner = function() {
+    banner.style.display = 'none';
+    localStorage.setItem('hide_patriotic_banner', '1');
+  };
+})();
+</script>
+<div id="pinned-messages"></div>
     <div id="search-bar">
       <input id="search-input" placeholder="搜索聊天记录..." autocomplete="off">
       <button onclick="doSearch()">搜索</button>
@@ -1323,6 +1350,8 @@ document.addEventListener('dblclick', (e) => {
 
   function startSocket() {
     socket = io({ auth: { token } });
+    window.socket = socket; // [橘域网修复] 暴露给 invite.js / 雷达 / 外部脚本
+    window.dispatchEvent(new Event('orange:socket-ready')); // [橘域网修复] 唤醒排队中的订阅
 
     socket.on('me', (data) => {
 
@@ -1451,6 +1480,15 @@ document.addEventListener('dblclick', (e) => {
       btn.disabled = !hasMore;
     });
     socket.on('message', function(m) {
+      if (m.type === 'snack-share') {
+        var claimed = m.claimedBy && Array.isArray(m.claimedBy) && m.claimedBy.indexOf(myName) !== -1;
+        var isMine = m.name === myName;
+        var rc = m.rarity === 'legendary' ? '#fbbf24' : m.rarity === 'epic' ? '#a855f7' : m.rarity === 'rare' ? '#4a9eff' : '#555';
+        var card = '<div class="msg snack-msg"><div style="background:linear-gradient(135deg,#1a1a2e,#2a1a3e);border:2px solid ' + rc + ';border-radius:12px;padding:14px;margin:8px 0;cursor:pointer;text-align:center" onclick="claimSnackFromChat(this)" data-feedid="' + (m.feedId || '') + '"><div style="font-size:32px;margin-bottom:4px">' + (m.snackEmoji || '🍪') + '</div><div style="font-size:14px;font-weight:bold;color:#fff;margin-bottom:4px">' + (m.snackName || '零食') + '</div><div style="font-size:11px;color:#aaa;margin-bottom:8px">' + (m.rarity || '') + '</div>' + (claimed ? '<div style="font-size:12px;color:#6bcb77">已领取</div>' : isMine ? '<div style="font-size:12px;color:#888">你的分享</div>' : '<div style="font-size:12px;color:#ff6b6b">点击领取</div>') + '</div></div>';
+        addMsg(card);
+        if (m.name !== myName && window.triggerNotify) window.triggerNotify(m);
+        return;
+      }
       renderMsg(m);
       // 如果是别人发的，触发提醒
       if (m.name !== myName && window.triggerNotify) {
@@ -1470,51 +1508,6 @@ document.addEventListener('dblclick', (e) => {
 
     var storyCancel = document.getElementById('story-cancel');
     if (storyCancel) storyCancel.onclick = function() { document.getElementById('story-modal').style.display = 'none'; };
-
-    var storySubmit = document.getElementById('story-submit');
-    if (storySubmit) {
-      storySubmit.onclick = async function() {
-        var text = document.getElementById('story-input').value.trim();
-        if (!text) { alert('写点什么吧~'); return; }
-        var btn = this;
-        btn.disabled = true;
-        btn.textContent = 'AI 评估中...';
-        try {
-          var res = await fetch('/api/story', {
-            method: 'POST',
-            headers: { 'Authorization': token, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: text, channel: currentChannel })
-          });
-          var data = await res.json();
-          if (data.ok) {
-            alert('发布成功！AI 认为这条分享价值 ' + data.score + ' 🍊');
-            document.getElementById('story-input').value = '';
-            document.getElementById('story-modal').style.display = 'none';
-          } else alert('失败：' + (data.msg || '未知错误'));
-        } catch (err) { alert('网络错误：' + err.message); } 
-        finally { btn.disabled = false; btn.textContent = '发布'; }
-      };
-    }
-
-    // 2. 发红包
-    var rpBtn = document.getElementById('rp-btn');
-    if (rpBtn) {
-      rpBtn.onclick = function() { document.getElementById('rp-modal').style.display = 'flex'; };
-    }
-    var rpCancel = document.getElementById('rp-cancel');
-    if (rpCancel) rpCancel.onclick = function() { document.getElementById('rp-modal').style.display = 'none'; };
-
-    var rpSend = document.getElementById('rp-send');
-    if (rpSend) {
-      rpSend.onclick = function() {
-        var total = document.getElementById('rp-total').value;
-        var count = document.getElementById('rp-count').value;
-        if (!total || !count) { alert('请填写金额和个数'); return; }
-        socket.emit('send_red_packet', { total: Number(total), count: Number(count) });
-        document.getElementById('rp-modal').style.display = 'none';
-      };
-    }
-
 
     socket.on('blocked_list', function(list) {
       blockedList = list || [];
@@ -1694,7 +1687,7 @@ document.addEventListener('dblclick', (e) => {
         (isMine ? '我发出的红包' : escapeHtml(m.name) + ' 的红包') + '</div><div class="rp-sub">' + subText + '</div></div></div>';
     } else if (m.type === 'story') {
       body = '<div style="background:#fdf0f5; border-left:4px solid #e91e63; padding:12px; border-radius:6px; margin-bottom:4px;">' +
-        '<div style="font-size:12px; color:#e91e63; font-weight:600; margin-bottom:6px;">📝 的分享</div>' +
+        '<div style="font-size:12px; color:#e91e63; font-weight:600; margin-bottom:6px;">📝 ' + escapeHtml(displayName) + ' 的分享</div>' +
         '<div style="font-size:14px; color:#333; line-height:1.5; white-space:pre-wrap;">' + escapeHtml(m.text) + '</div>' +
         '<div style="font-size:11px; color:#d81b60; margin-top:6px; text-align:right;">🍊 系统奖励 +' + (m.score||0) + '</div></div>';
     } else if (m.type === 'poll' && m.poll) {
@@ -1806,7 +1799,8 @@ document.addEventListener('dblclick', (e) => {
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
   function escapeAttr(s) {
-    return String(s).replace(/"/g, '&quot;');
+    // [橘域网修复] 补全 & < > ' ，原先只转义双引号，单引号拼 onclick 存在 XSS 面
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
   // ============ 启动 ============
@@ -1930,7 +1924,7 @@ document.addEventListener('dblclick', (e) => {
     const before = firstMsgEl ? firstMsgEl.dataset.id : '';
 
     try {
-      const res = await fetch('/api/history?channel=' + encodeURIComponent(currentChannel) + '&limit=30&before=' + encodeURIComponent(before));
+      const res = await fetch('/api/history?channel=' + encodeURIComponent(currentChannel) + '&limit=30&before=' + encodeURIComponent(before), { headers: { 'Authorization': token } });
       const data = await res.json();
       if (!data.ok) { btn.textContent = '加载失败'; btn.disabled = false; return; }
 
@@ -1966,7 +1960,7 @@ document.addEventListener('dblclick', (e) => {
     searchResultsEl.innerHTML = '搜索中...';
     searchResultsEl.style.display = 'block';
     try {
-      const res = await fetch('/api/search?q=' + encodeURIComponent(q) + '&channel=' + encodeURIComponent(currentChannel));
+      const res = await fetch('/api/search?q=' + encodeURIComponent(q) + '&channel=' + encodeURIComponent(currentChannel), { headers: { 'Authorization': token } });
       const data = await res.json();
       if (!data.ok || data.messages.length === 0) {
         searchResultsEl.innerHTML = '<div style="color:#999;font-size:13px;padding:4px">没有找到匹配的消息</div>';
@@ -2105,7 +2099,7 @@ document.addEventListener('dblclick', (e) => {
     emojiPicker.classList.add('open');
   };
 
-  if (emojiPicker) if (emojiPicker) emojiPicker.addEventListener('click', function(e) {
+  if (emojiPicker) emojiPicker.addEventListener('click', function(e) {
     var t = e.target.closest('.e');
     if (!t) return;
     if (currentEmojiTarget) {
@@ -2698,18 +2692,8 @@ document.addEventListener('dblclick', (e) => {
       .then(function(d) { if (d.ok) applyLists(d.data); })
       .catch(function() {});
 
-    // 挂 socket
-    if (typeof socket !== 'undefined' && socket) {
-      if (socket) socket.on('lists_updated', function(d) { applyLists(d); });
-    } else {
-      var t = setInterval(function() {
-        if (typeof socket !== 'undefined' && socket) {
-          clearInterval(t);
-          if (socket) socket.on('lists_updated', function(d) { applyLists(d); });
-        }
-      }, 200);
-      setTimeout(function() { clearInterval(t); }, 30000);
-    }
+    // [橘域网修复] lists_updated 统一由 startSocket() 内的 __applyLists 转发。
+    // 原先这两处 if(socket) 在 DOMContentLoaded 阶段恒为 null，且 30s 后静默放弃，属死代码。
   })();
   });
 
@@ -2936,32 +2920,9 @@ document.addEventListener('dblclick', (e) => {
       });
     }
 
-    // 分享按钮兜底
-    var storySubmit = document.getElementById('story-submit');
-    if (storySubmit) {
-      if (storySubmit) storySubmit.addEventListener('click', async function() {
-        var text = document.getElementById('story-input').value.trim();
-        if (!text) return;
-        var btn = this; btn.disabled = true; btn.textContent = 'AI 评估中...';
-        try {
-          var res = await fetch('/api/story', {
-            method: 'POST',
-            headers: { 'Authorization': token, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: text, channel: currentChannel })
-          });
-          var data = await res.json();
-          if (data.ok) {
-            alert('发布成功！AI 认为这条分享价值 ' + data.score + ' 🍊');
-            document.getElementById('story-input').value = '';
-            document.getElementById('story-modal').style.display = 'none';
-          } else alert(data.msg);
-        } catch (e) { alert('网络错误'); }
-        btn.disabled = false; btn.textContent = '发布';
-      });
-    }
   })();
 
-  if (socket) socket.on('red_packet_updated', function(data) {
+  window.__onSocket('red_packet_updated', function(data) {
     var el = document.querySelector('.red-packet-card[data-rp="' + data.messageId + '"]');
     if (!el) return;
     var rp = data.redPacket;
@@ -2979,7 +2940,7 @@ document.addEventListener('dblclick', (e) => {
     el.querySelector('.rp-sub').textContent = subText;
   });
 
-  if (socket) socket.on('message_updated', function(data) {
+  window.__onSocket('message_updated', function(data) {
     // 如果是打赏更新
     if (!data.tips) return;
     var msgEl = document.querySelector('.msg[data-id="' + data.messageId + '"]');
@@ -2994,7 +2955,7 @@ document.addEventListener('dblclick', (e) => {
     bubble.appendChild(div);
   });
 
-  if (socket) socket.on('balance_updated', function() {
+  window.__onSocket('balance_updated', function() {
     // 简单刷新页面余额展示，如果你侧栏有余额的话
     // 这里为了兼容，只弹个提示，实际上余额会在跳转龙虾页等地方重新拉
   });
@@ -3033,45 +2994,6 @@ document.addEventListener('dblclick', (e) => {
       btn.textContent = '发布';
     }
   });
-
-  // 拦截并渲染 story 类型的消息
-  var oldRenderMsg = renderMsg;
-  renderMsg = function(m, prepend) {
-    if (m.type === 'story') {
-      var t = new Date(m.time).toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit'});
-      var sender = usersById[m.userId] || { displayName: m.name, avatar: null };
-      var displayName = sender.displayName || m.name;
-      var avatarHtml = sender.avatar 
-        ? '<img class="avatar" src="' + escapeAttr(sender.avatar) + '">' 
-        : '<div class="avatar">' + escapeHtml((displayName||'?').slice(0,1)) + '</div>';
-      
-      var div = document.createElement('div');
-      div.className = 'msg';
-      div.dataset.id = m.id;
-      div.dataset.userId = m.userId;
-      div.dataset.name = displayName;
-      div.innerHTML = avatarHtml + '<div class="bubble">' +
-        '<div style="background:#fdf0f5; border-left:4px solid #e91e63; padding:12px; border-radius:6px; margin-bottom:4px;">' +
-        '<div style="font-size:12px; color:#e91e63; font-weight:600; margin-bottom:6px;">📝 ' + escapeHtml(displayName) + ' 的分享 <span style="font-weight:normal; color:#aaa; font-size:11px; margin-left:6px;">' + t + '</span></div>' +
-        '<div style="font-size:14px; color:#333; line-height:1.5; white-space:pre-wrap;">' + escapeHtml(m.text) + '</div>' +
-        '<div style="font-size:11px; color:#d81b60; margin-top:6px; text-align:right;">🍊 系统奖励 +' + (m.score||0) + '</div>' +
-        '</div></div>';
-      
-      if (prepend) {
-        const anchor = document.getElementById('load-more-btn');
-        anchor.insertAdjacentElement('afterend', div);
-      } else {
-        messagesEl.appendChild(div);
-        messagesEl.scrollTop = messagesEl.scrollHeight;
-      }
-      return;
-    }
-    // 其他类型走原逻辑
-    return oldRenderMsg(m, prepend);
-  };
-
-
-  
 
   try {
   
@@ -3376,8 +3298,8 @@ document.addEventListener('dblclick', (e) => {
     };
   })();
 
-  checkAuth();
   } catch (e) { console.error('启动报错:', e); }
+  checkAuth(); // [橘域网修复] 移出 try，任一功能异常都不再阻断聊天室启动
 
 </script>
 
@@ -3741,7 +3663,41 @@ document.addEventListener('dblclick', (e) => {
     </div>
     <script>
       document.getElementById('ds-whale').onclick = function() {
-        alert('🐳 我是橘域网的机房吉祥物，今天想聊点什么？');
+        var places = [
+          { url: '/fishing.html', msg: '今天累了，去赛博捞鱼场钓会儿鱼吧？' },
+          { url: '/hotpot.html', msg: '好饿，先去沸沸火锅整点肉吃！' },
+          { url: '/garden.html', msg: '看看菜园子里的菜熟了没，别被偷了。' },
+          { url: '/auction.html', msg: '赛博拍卖行好像在上新，去捡个漏？' },
+          { url: '/loan.html', msg: '手头有点紧，找金库借点橘子花花？' },
+          { url: '/snake.html', msg: '来一把 3D 贪吃蛇，活动活动手指。' },
+          { url: '/fps.html', msg: '去 3D 食材峡谷突突突一波？' },
+          { url: '/market.html', msg: '跳蚤市场好像有人在卖好东西，去看看。' },
+          { url: '/kitchen.html', msg: '手痒了，去赛博厨房搞个黑暗料理。' },
+          { url: '/lottery.html', msg: '运气不错，去橘子抽奖机搏一搏单车变摩托？' },
+          { url: '/lottery-game.html', msg: '赛博彩票马上开奖了，去凑个热闹？' },
+          { url: '/radio.html', msg: '赛博电台有人说话，去听听他们在聊啥？' },
+          { url: '/dashboard.html', msg: '老板专属数据大屏，去看看橘域网到底赚了多少。' },
+          { url: '/stock.html', msg: '股市风云变幻，去赛博股票交易所盯个盘？' },
+          { url: '/quiz.html', msg: '每日一题还没答，不拿白不拿的橘子。' },
+          { url: '/wall.html', msg: '去留言墙看看，大家在发什么牢骚。' },
+          { url: '/bottle.html', msg: '往赛博海里扔个漂流瓶，看看能捞出啥。' }
+        ];
+        
+        var p = places[Math.floor(Math.random() * places.length)];
+        
+        // 喷水特效
+        this.style.transform = 'scale(1.2) translateY(-20px)';
+        this.style.transition = 'all 0.3s ease-in';
+        
+        setTimeout(function() {
+          // 恢复鲸鱼
+          document.getElementById('ds-whale').style.transform = '';
+          
+          // 弹窗询问
+          if (confirm('🐳 ' + p.msg)) {
+            window.location.href = p.url;
+          }
+        }, 300);
       };
     
     window.__openBlindbox = function() {
@@ -3777,47 +3733,10 @@ document.addEventListener('dblclick', (e) => {
 </div>
 
 <script>
-
-</script>
-<script>
-// ===== 雷达提示音系统 (底层直连版) =====
+// ===== 雷达提示音系统（[橘域网修复] 合并重复实现，统一走 __onSocket） =====
 (function() {
   let radarEnabled = false;
   let audioCtx = null;
-  
-  function initRadar() {
-    const btn = document.getElementById('btn-radar-bell');
-    if (btn) {
-      btn.onclick = function() {
-        try {
-          if (!radarEnabled) {
-            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            radarEnabled = true;
-            btn.style.background = '#e67e22';
-            btn.innerText = '🔕 关闭雷达提示音';
-            playBeep();
-          } else {
-            radarEnabled = false;
-            btn.style.background = '#2ecc71';
-            btn.innerText = '🔔 开启雷达提示音';
-          }
-        } catch(e) { alert('音频引擎启动失败: ' + e.message); }
-      };
-    }
-
-    // 直接拦截 socket 消息
-    if (window.socket) {
-      window.socket.on('message', (msg) => {
-        if (radarEnabled && msg.text && msg.text.includes('🚨 老板注意！')) {
-          playBeep();
-          if (Notification.permission === 'granted') {
-            new Notification('赛博雷达', { body: msg.text });
-          }
-        }
-      });
-    }
-  }
 
   function playBeep() {
     if (!audioCtx) return;
@@ -3832,72 +3751,50 @@ document.addEventListener('dblclick', (e) => {
     osc.start(); osc.stop(audioCtx.currentTime + 0.5);
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initRadar);
-  } else {
-    initRadar();
-  }
-})();
-</script>
-<script>
-// ===== 雷达提示音系统 (底层直连版) =====
-(function() {
-  let radarEnabled = false;
-  let audioCtx = null;
-  
   function initRadar() {
     const btn = document.getElementById('btn-radar-bell');
-    if (btn) {
-      btn.onclick = function() {
-        try {
-          if (!radarEnabled) {
-            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            radarEnabled = true;
-            btn.style.background = '#e67e22';
-            btn.innerText = '🔕 关闭雷达提示音';
-            playBeep();
-          } else {
-            radarEnabled = false;
-            btn.style.background = '#2ecc71';
-            btn.innerText = '🔔 开启雷达提示音';
-          }
-        } catch(e) { alert('音频引擎启动失败: ' + e.message); }
-      };
-    }
+    if (!btn) return;
+    btn.onclick = function() {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        radarEnabled = !radarEnabled;
+        btn.style.background = radarEnabled ? '#e67e22' : '#2ecc71';
+        btn.innerText = radarEnabled ? '🔕 关闭雷达提示音' : '🔔 开启雷达提示音';
+        if (radarEnabled) playBeep();
+      } catch (e) { alert('音频引擎启动失败: ' + e.message); }
+    };
+  }
 
-    // 直接拦截 socket 消息
-    if (window.socket) {
-      window.socket.on('message', (msg) => {
-        if (radarEnabled && msg.text && msg.text.includes('🚨 老板注意！')) {
-          playBeep();
-          if (Notification.permission === 'granted') {
-            new Notification('赛博雷达', { body: msg.text });
-          }
-        }
+  window.__onSocket('message', (msg) => {
+    if (radarEnabled && msg.text && msg.text.includes('🚨 老板注意！')) {
+      playBeep();
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification('赛博雷达', { body: msg.text });
+      }
+    }
+  });
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initRadar);
+  else initRadar();
+})();
+
+    function claimSnackFromChat(el) {
+      var feedId = el.getAttribute('data-feedid');
+      if (!feedId) return;
+      var tk = localStorage.getItem('token') || '';
+      fetch('/api/snacks/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': tk },
+        body: JSON.stringify({ feedId: feedId })
+      }).then(function(r){ return r.json(); }).then(function(d) {
+        if (d.ok) {
+          el.innerHTML = '<div style="font-size:14px;color:#6bcb77;padding:10px">领取成功 ' + (d.snack ? d.snack.emoji + ' ' + d.snack.name : '') + '</div>';
+          el.style.cursor = 'default';
+          el.onclick = null;
+        } else { alert(d.msg || '领取失败'); }
       });
     }
-  }
-
-  function playBeep() {
-    if (!audioCtx) return;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain); gain.connect(audioCtx.destination);
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(1760, audioCtx.currentTime + 0.1);
-    gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-    osc.start(); osc.stop(audioCtx.currentTime + 0.5);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initRadar);
-  } else {
-    initRadar();
-  }
-})();
 </script>
 </body>
 </html>

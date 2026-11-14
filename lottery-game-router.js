@@ -129,11 +129,11 @@ module.exports = function setupLotteryGame(app, ctx) {
       });
     }
 
+    data.history.unshift({ ...c });
+    if (data.history.length > 20) data.history = data.history.slice(0, 20);
     save(data);
     ctx.io.emit('lottery_game_draw', { roundNo: c.roundNo, winning: win, results, prizePool: c.prizePool });
     console.log('[赛博彩票] 第 ' + c.roundNo + ' 期开奖，中奖 ' + results.length + ' 注');
-    data.history.unshift({ ...c });
-    if (data.history.length > 20) data.history = data.history.slice(0, 20);
     setTimeout(newRound, 3000);
   }
 

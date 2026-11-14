@@ -13,6 +13,20 @@ module.exports = function setupApiHub(app, ctx) {
 
   let apisData = loadApis();
 
+  // 防 SSRF：只允许公网 http/https，禁止回环、内网、Tailscale 段、云元数据、非常规 host
+  function assertSafeUrl(raw) {
+    let u;
+    try { u = new URL(String(raw)); } catch (e) { return 'URL 格式错误'; }
+    if (!['http:', 'https:'].includes(u.protocol)) return '仅支持 http/https';
+    const h = u.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) return '禁止访问本机地址';
+    if (/^(127\.|10\.|192\.168\.|169\.254\.|0\.|100\.(6[4-9]|[7-9]\d|1[0-1]\d|12[0-7])\.)/.test(h)) return '禁止访问内网地址';
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return '禁止访问内网地址';
+    if (h === '::1' || h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80')) return '禁止访问内网地址';
+    if (/^\d+$/.test(h) || h.includes('%')) return '禁止访问非常规地址';
+    return null;
+  }
+
   // 获取已接入的 API 列表
   app.get('/api/hub/list', (req, res) => {
     res.json({ ok: true, apis: apisData });
@@ -29,15 +43,19 @@ module.exports = function setupApiHub(app, ctx) {
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       return res.json({ ok: false, msg: 'URL 必须以 http:// 或 https:// 开头' });
     }
+    const badUrl = assertSafeUrl(url);
+    if (badUrl) return res.json({ ok: false, msg: 'URL 被安全策略拦截：' + badUrl });
 
     // 1. 沙箱测试连通性（最多等 5 秒，防止卡死）
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
       
-      const testRes = await fetch(url, { signal: controller.signal });
+      const testRes = await fetch(url, { signal: controller.signal, redirect: 'manual' });
       clearTimeout(timeoutId);
-      
+      if (testRes.status >= 300 && testRes.status < 400) {
+        return res.json({ ok: false, msg: '不允许重定向，防止绕过地址白名单' });
+      }
       const text = await testRes.text();
       
       // 2. 验证是否为 JSON 格式
@@ -73,12 +91,19 @@ module.exports = function setupApiHub(app, ctx) {
 
   // 用户调用已接入的 API（由服务器代理请求，解决跨域问题）
   app.get('/api/hub/proxy', async (req, res) => {
+    if (!ctx.tokens[req.headers.authorization]) return res.status(401).json({ ok: false, msg: '未登录' });
     const { id } = req.query;
     const targetApi = apisData.find(a => a.id === id);
     if (!targetApi) return res.status(404).json({ ok: false, msg: '接口不存在' });
+    const badUrl = assertSafeUrl(targetApi.url);
+    if (badUrl) return res.json({ ok: false, msg: '该接口地址已被安全策略拦截：' + badUrl });
 
     try {
-      const r = await fetch(targetApi.url);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const r = await fetch(targetApi.url, { signal: controller.signal, redirect: 'manual' });
+      clearTimeout(timeoutId);
+      if (r.status >= 300 && r.status < 400) return res.json({ ok: false, msg: '不允许重定向' });
       const data = await r.json();
       res.json({ ok: true, data });
     } catch (err) {

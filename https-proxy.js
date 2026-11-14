@@ -20,7 +20,7 @@ const proxy = httpProxy.createProxyServer({
 });
 
 proxy.on('error', (err, req, res) => {
-  console.error('代理错误:', err.message);
+  console.error('代理错误:', JSON.stringify({ code: err.code, errno: err.errno, syscall: err.syscall, message: err.message, url: req && req.url, method: req && req.method }));
   if (res && res.writeHead) {
     res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('代理错误: ' + err.message);

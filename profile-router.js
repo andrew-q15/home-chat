@@ -45,7 +45,6 @@ module.exports = function setupProfile(app, ctx) {
   // 获取用户主页数据
   app.get('/api/profile/me', (req, res) => {
     const auth = req.headers.authorization;
-    console.log('[主页调试] auth前16位:', (auth||'').slice(0,16), '| ctx.tokens有这token吗:', !!ctx.tokens[auth], '| 对应username:', ctx.tokens[auth], '| state.users有这用户吗:', !!(ctx.tokens[auth] && state.users[ctx.tokens[auth]]));
     const username = ctx.tokens[req.headers.authorization];
     if (!username) return res.status(401).json({ ok: false });
     const target = state.users[username];

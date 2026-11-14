@@ -201,6 +201,7 @@
   .code-line .st { color: #a5d6ff; }
   .code-line .cm { color: #8b949e; }
 </style>
+  <script src="/esc.js"></script>
 </head>
 <body>
 
@@ -284,6 +285,7 @@
   if (!token) { alert('未登录'); location.href = '/'; return; }
   
   var socket = io({ auth: { token } });
+window.socket = socket; // [橘域网修复] 统一暴露全局
   var boardEl = document.getElementById('board');
   var toastEl = document.getElementById('toast');
   var textEl = document.getElementById('intel-text');

@@ -96,8 +96,9 @@ module.exports = function setupLoan(app, ctx) {
     if (loan.status !== 'pending') return res.json({ ok: false, msg: '已审批过' });
     const target = state.users[loan.username];
     if (!target) return res.json({ ok: false, msg: '借款人不存在' });
-    const inc = ctx.treasury.income(loan.amount, '贷款放款《' + loan.id + '》by ' + username, 'loan');
-    if (inc.ok === false) return res.json({ ok: false, msg: '金库余额不足，无法放款' });
+    // 放款是金库「支出」，原来写成 income 会让金库凭空多出一笔等于贷款额的钱
+    const out = ctx.treasury.spend(loan.amount, '贷款放款《' + loan.id + '》by ' + username, 'loan');
+    if (out.ok === false) return res.json({ ok: false, msg: '金库余额不足，无法放款' });
     const bal = getBalance(target.id);
     bal.oranges += loan.amount;
     addOrangeLog(target.id, loan.amount, '贷款放款');
@@ -186,6 +187,7 @@ module.exports = function setupLoan(app, ctx) {
     const loan = (t.loans || []).find(l => l.id === req.params.id);
     if (!loan) return res.status(404).json({ ok: false, msg: '贷款不存在' });
     if (loan.status === 'written_off') return res.json({ ok: false, msg: '已核销' });
+    if (loan.status !== 'active') return res.json({ ok: false, msg: '只有放款中的贷款才能核销' });
     const now = Date.now();
     const c = calcOwed(loan, now);
     loan.status = 'written_off';

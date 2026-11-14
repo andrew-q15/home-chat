@@ -31,18 +31,16 @@ module.exports = function setupAuction(app, ctx) {
       const sellerShare = Math.floor(finalPrice * 0.9);
       const treasuryShare = finalPrice - sellerShare;
       const sellerUser = state.users[a.seller];
-      if (sellerUser) {
+      // 先扣金库，成功才给卖家入账：避免金库不足时「钱已加、账没扣」的超发
+      // 金库保留 10%（出价时已进金库，这里只扣 90% 给卖家）
+      const payout = ctx.treasury.spend(sellerShare, "拍卖成交《" + a.name + "》给卖家 90%", "auction");
+      if (payout.ok === false) {
+        console.error('[拍卖] 金库余额不足，卖家分成挂账待补:', a.id, sellerShare);
+      } else if (sellerUser) {
         const sbal = getBalance(sellerUser.id);
         sbal.oranges += sellerShare;
         addOrangeLog(sellerUser.id, sellerShare, "拍卖成交：《" + a.name + "》90%");
       }
-      // 金库保留 10%（出价时已进金库，这里只扣 90% 给卖家）
-      const t = ctx.treasury.load();
-      t.oranges -= sellerShare;
-      if (!t.history) t.history = [];
-      t.history.unshift({ time: now(), type: "auction_payout", amount: -sellerShare, reason: "拍卖成交《" + a.name + "》给卖家 90%", by: "auction" });
-      if (t.history.length > 200) t.history = t.history.slice(0, 200);
-      fs.writeFileSync(path.join(__dirname, "treasury.json"), JSON.stringify(t, null, 2));
       // 买家余额已在出价时扣了，成交后不再扣
       result = { id: a.id, name: a.name, seller: a.seller, finalPrice, buyer: top.bidder, sold: true, sellerShare, treasuryShare, endedAt: now() };
     }

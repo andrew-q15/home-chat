@@ -8,6 +8,21 @@ const config = require('./config');
 module.exports = function setupUpload(app, ctx) {
   const { tokens, state, saveState, io, broadcastUserUpdate } = ctx;
 
+  // /api/vision 原本调用了未定义的 addObservation，必然 500；这里补本地实现
+  const OBS_FILE = path.join(__dirname, 'observations.json');
+  function addObservation(text) {
+    let obs = [];
+    try { obs = JSON.parse(fs.readFileSync(OBS_FILE, 'utf8')); } catch (e) { obs = []; }
+    if (!Array.isArray(obs)) obs = [];
+    obs.push({ time: Date.now(), text: String(text) });
+    if (obs.length > 100) obs = obs.slice(-100);
+    try { fs.writeFileSync(OBS_FILE, JSON.stringify(obs, null, 2)); } catch (e) {}
+  }
+  function requireAuth(req, res, next) {
+    if (!tokens[req.headers.authorization]) return res.status(401).json({ ok: false, msg: '未登录' });
+    next();
+  }
+
   const AVATAR_DIR = path.join(__dirname, 'public', 'avatars');
   if (!fs.existsSync(AVATAR_DIR)) fs.mkdirSync(AVATAR_DIR, { recursive: true });
   const UPLOAD_DIR = path.join(__dirname, 'public', 'uploads');
@@ -23,10 +38,9 @@ module.exports = function setupUpload(app, ctx) {
 
 
 // ============ 文件/图片上传 ============
-app.post('/api/upload', upload.single('file'), (req, res) => {
-  const token = req.headers.authorization;
-  const username = tokens[token];
-  if (!username) return res.status(401).json({ ok: false, msg: '未登录' });
+// 鉴权必须放在 multer 之前，否则未登录也能把 500MB 文件写进磁盘
+app.post('/api/upload', requireAuth, upload.single('file'), (req, res) => {
+  const username = tokens[req.headers.authorization];
   if (!req.file) return res.status(400).json({ ok: false, msg: '没有文件' });
 
   const url = '/uploads/' + req.file.filename;
@@ -69,7 +83,11 @@ const avatarStorage = multer.diskStorage({
     cb(null, uid + '-' + Date.now() + '.png');
   },
 });
-const avatarUpload = multer({ storage: avatarStorage, limits: { fileSize: 2 * 1024 * 1024 } });
+const avatarUpload = multer({
+  storage: avatarStorage,
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, /^image\/(png|jpe?g|gif|webp)$/i.test(file.mimetype)),
+});
 
 app.post('/api/avatar', avatarUpload.single('avatar'), (req, res) => {
   const token = req.headers.authorization;
@@ -93,7 +111,7 @@ app.post('/api/avatar', avatarUpload.single('avatar'), (req, res) => {
 });
 
 // ============ AI 视觉（隐身观察） ============
-app.post('/api/vision', upload.single('image'), async (req, res) => {
+app.post('/api/vision', requireAuth, upload.single('image'), async (req, res) => {
   if (!req.file) return res.status(400).json({ ok: false, msg: '没有图片' });
 
   const buf = fs.readFileSync(req.file.path);

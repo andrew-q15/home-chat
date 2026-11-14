@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  chat:
+    build: .
+    container_name: orange-chat
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./auction.json:/app/auction.json:rw
+      - ./board.json:/app/board.json:rw
+      - ./bottles.json:/app/bottles.json:rw
+      - ./data.json:/app/data.json:rw
+      - ./drawguess.json:/app/drawguess.json:rw
+      - ./food.json:/app/food.json:rw
+      - ./fortune.json:/app/fortune.json:rw
+      - ./garden.json:/app/garden.json:rw
+      - ./hiking.json:/app/hiking.json:rw
+      - ./intel-en.json:/app/intel-en.json:rw
+      - ./intel-members.json:/app/intel-members.json:rw
+      - ./intel.json:/app/intel.json:rw
+      - ./koi.json:/app/koi.json:rw
+      - ./lists.json:/app/lists.json:rw
+      - ./lobster.json:/app/lobster.json:rw
+      - ./lottery-game.json:/app/lottery-game.json:rw
+      - ./market.json:/app/market.json:rw
+      - ./memory.json:/app/memory.json:rw
+      - ./money-ledger.json:/app/money-ledger.json:rw
+      - ./night-ai.json:/app/night-ai.json:rw
+      - ./observations.json:/app/observations.json:rw
+      - ./posts.json:/app/posts.json:rw
+      - ./quiz.json:/app/quiz.json:rw
+      - ./sonar.json:/app/sonar.json:rw
+      - ./stickers.json:/app/stickers.json:rw
+      - ./stock.json:/app/stock.json:rw
+      - ./treasury.json:/app/treasury.json:rw
+      - ./wall.json:/app/wall.json:rw
+      - ./wishes.json:/app/wishes.json:rw
+      - ./writings.json:/app/writings.json:rw
+      - ./backups:/app/backups:rw
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - TAILSCALE_KEY=${TAILSCALE_KEY:-}
+      - DEVICE_API_KEY=${DEVICE_API_KEY:-}
+      - AI_URL=${AI_URL:-}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/verify',{method:'POST'}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  backup:
+    build: .
+    container_name: orange-backup
+    restart: unless-stopped
+    command: ["node", "backup.js"]
+    volumes:
+      - ./auction.json:/app/auction.json:rw
+      - ./board.json:/app/board.json:rw
+      - ./bottles.json:/app/bottles.json:rw
+      - ./data.json:/app/data.json:rw
+      - ./drawguess.json:/app/drawguess.json:rw
+      - ./food.json:/app/food.json:rw
+      - ./fortune.json:/app/fortune.json:rw
+      - ./garden.json:/app/garden.json:rw
+      - ./hiking.json:/app/hiking.json:rw
+      - ./intel-en.json:/app/intel-en.json:rw
+      - ./intel-members.json:/app/intel-members.json:rw
+      - ./intel.json:/app/intel.json:rw
+      - ./koi.json:/app/koi.json:rw
+      - ./lists.json:/app/lists.json:rw
+      - ./lobster.json:/app/lobster.json:rw
+      - ./lottery-game.json:/app/lottery-game.json:rw
+      - ./market.json:/app/market.json:rw
+      - ./memory.json:/app/memory.json:rw
+      - ./money-ledger.json:/app/money-ledger.json:rw
+      - ./night-ai.json:/app/night-ai.json:rw
+      - ./observations.json:/app/observations.json:rw
+      - ./posts.json:/app/posts.json:rw
+      - ./quiz.json:/app/quiz.json:rw
+      - ./sonar.json:/app/sonar.json:rw
+      - ./stickers.json:/app/stickers.json:rw
+      - ./stock.json:/app/stock.json:rw
+      - ./treasury.json:/app/treasury.json:rw
+      - ./wall.json:/app/wall.json:rw
+      - ./wishes.json:/app/wishes.json:rw
+      - ./writings.json:/app/writings.json:rw
+      - ./backups:/app/backups:rw
+
+  report:
+    build: .
+    container_name: orange-report
+    restart: unless-stopped
+    command: ["node", "morning-report.js"]

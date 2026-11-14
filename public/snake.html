@@ -39,6 +39,7 @@
     color: #aaa; font-size: 12px; background: rgba(0,0,0,.5); padding: 6px 16px; border-radius: 20px;
   }
 </style>
+  <script src="/esc.js"></script>
 </head>
 <body>
 <canvas id="game"></canvas>
@@ -186,6 +187,7 @@ const camLook = new THREE.Vector3();
 
 // 联机
 const socket = io({ auth: { token } });
+window.socket = socket; // [橘域网修复] 统一暴露全局
 
 socket.on('connect', () => {
   socket.emit('snake_join');

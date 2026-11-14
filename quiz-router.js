@@ -70,6 +70,7 @@ module.exports = function setupQuiz(app, ctx) {
   }
 
   app.get('/api/quiz/today', (req, res) => {
+    if (!quizData.today || quizData.today.date !== todayStr()) newQuiz();
     if (!quizData.today) return res.json({ ok: true, quiz: null });
     const t = quizData.today;
     res.json({ ok: true, quiz: {

@@ -35,6 +35,7 @@
   .vault-item p { font-size: 14px; color: #a0aec0; line-height: 1.6; white-space: pre-wrap; margin-bottom: 12px;}
   .vault-meta { font-size: 12px; color: #718096; display: flex; justify-content: space-between; }
 </style>
+  <script src="/esc.js"></script>
 </head>
 <body>
 
@@ -71,6 +72,8 @@
 <script>
 let myToken = localStorage.getItem('token');
 
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
 function loadVault() {
   fetch('/api/vault', { headers: { 'Authorization': myToken } }).then(r=>r.json()).then(d => {
     if (!d.ok) return;
@@ -81,10 +84,10 @@ function loadVault() {
     }
     list.innerHTML = d.vault.map(item => `
       <div class="vault-item">
-        <h3>${item.title}</h3>
-        <p>${item.content}</p>
+        <h3>${esc(item.title)}</h3>
+        <p>${esc(item.content)}</p>
         <div class="vault-meta">
-          <span>存入者: ${item.author}</span>
+          <span>存入者: ${esc(item.author)}</span>
           <span>${new Date(item.time).toLocaleString()}</span>
         </div>
       </div>

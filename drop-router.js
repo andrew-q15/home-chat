@@ -49,10 +49,12 @@ module.exports = function setupDrop(app, ctx) {
 
     console.log('[掉落] ' + username + ' 发起橘子雨，15 秒内前 3 名发言得 50🍊');
 
-    // 15 秒后自动结束
+    // 15 秒后自动结束：先捕获 id 与名单，避免恒真判断和空引用
+    const dropId = activeDrop.id;
+    const dropClaims = activeDrop.claims.slice();
     setTimeout(() => {
-      if (activeDrop && activeDrop.id === activeDrop.id) {
-        ctx.io.emit('drop_end', { id: activeDrop.id, claims: activeDrop.claims });
+      if (activeDrop && activeDrop.id === dropId) {
+        ctx.io.emit('drop_end', { id: dropId, claims: dropClaims });
         activeDrop = null;
       }
     }, 15500);

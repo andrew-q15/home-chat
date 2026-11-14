@@ -29,6 +29,7 @@
   #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #38bdf8; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #38bdf8; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
   #toast.show { opacity: 1; }
 </style>
+  <script src="/esc.js"></script>
 </head>
 <body>
 <div class="header"><h1>📅 橘域网日历</h1><a href="/">← 返回聊天室</a></div>
@@ -90,6 +91,7 @@ window.__del = async function(id) {
 };
 
 const socket = io({ auth: { token } });
+window.socket = socket; // [橘域网修复] 统一暴露全局
 socket.on('calendar_updated', load);
 socket.on('calendar_deleted', load);
 load();

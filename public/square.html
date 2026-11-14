@@ -53,6 +53,7 @@
   .detail-input input { flex: 1; border: 1px solid #ddd; border-radius: 20px; padding: 8px 16px; outline: none; }
   .detail-input button { background: #ff2442; color: #fff; border: none; padding: 0 16px; border-radius: 20px; cursor: pointer; }
 </style>
+  <script src="/esc.js"></script>
 </head>
 <body>
 
@@ -119,6 +120,7 @@ let currentPostId = null;
 let uploadedImages = [];
 
 const socket = io({ auth: { token: myToken } });
+window.socket = socket; // [橘域网修复] 统一暴露全局
 
 socket.on('posts_updated', (posts) => {
   postsData = posts;

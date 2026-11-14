@@ -15,6 +15,7 @@ module.exports = function setupVault(app, ctx) {
 
   // 获取所有记忆（分页/最新）
   app.get('/api/vault', (req, res) => {
+    if (!ctx.tokens[req.headers.authorization]) return res.status(401).json({ ok: false, msg: '未登录' });
     res.json({ ok: true, vault: vaultData.slice(0, 100) });
   });
 

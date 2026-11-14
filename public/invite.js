@@ -1,4 +1,5 @@
 (function() {
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   // 注入 UI 样式
   const style = document.createElement('style');
   style.innerHTML = `
@@ -39,8 +40,9 @@
 
   let socket = null;
   // 等待 socket 初始化（兼容不同页面的变量名）
-  setInterval(() => {
+  const pollTimer = setInterval(() => {
     if (window.socket && !socket) {
+      clearInterval(pollTimer); // [橘域网修复] 拿到连接即停止轮询
       socket = window.socket;
       socket.on('invite_online_list', (list) => {
         const ul = document.getElementById('invite-list-ul');
@@ -48,10 +50,14 @@
           ul.innerHTML = '<li>现在没有其他人上线哦</li>';
           return;
         }
-        ul.innerHTML = list.map(u => `<li onclick="__sendInvite('${u}')"><span>${u}</span><span style="color:#e67e22;">发送邀请 →</span></li>`).join('');
+        ul.innerHTML = list.map(u => `<li data-name="${esc(u)}"><span>${esc(u)}</span><span style="color:#e67e22;">发送邀请 →</span></li>`).join('');
+        ul.querySelectorAll('li[data-name]').forEach(li => {
+          li.onclick = () => window.__sendInvite(li.dataset.name);
+        });
       });
     }
-  }, 500);
+  }, 200);
+  setTimeout(() => clearInterval(pollTimer), 30000); // [橘域网修复] 30s 兜底超时
 
   btn.onclick = () => {
     if (!socket) return alert('还没连接上服务器，请稍候');

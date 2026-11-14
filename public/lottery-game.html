@@ -26,6 +26,7 @@
   #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.9); color: #ce93d8; padding: 12px 24px; border-radius: 30px; font-size: 14px; border: 1px solid #ab47bc; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
   #toast.show { opacity: 1; }
 </style>
+  <script src="/esc.js"></script>
 </head>
 <body>
 <div class="header"><h1>🎫 赛博彩票</h1><a href="/">← 返回聊天室</a></div>
@@ -75,6 +76,7 @@ window.__buy = async function() {
   else toast('❌ ' + d.msg);
 };
 const socket = io({ auth: { token } });
+window.socket = socket; // [橘域网修复] 统一暴露全局
 socket.on('lottery_game_draw', d => { toast('🎉 第 ' + d.roundNo + ' 期开奖！中奖 ' + d.results.length + ' 注'); load(); });
 socket.on('lottery_game_new', d => { toast('🎫 第 ' + d.roundNo + ' 期开售'); load(); });
 load();
