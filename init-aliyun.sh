@@ -45,4 +45,4 @@ echo "9/10 crond（自愈 + 备份要用）"
 systemctl enable --now crond
 echo "10/10 完成"
 echo "  下一步：scp 状态 JSON → bash /root/setup-ecs.sh"
-echo "  然后：docker login registry.cn-hangzhou.aliyuncs.com -u <RAM用户名>"
+echo "  然后：docker login -u <DockerHub用户名>"
