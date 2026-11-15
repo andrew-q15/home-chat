@@ -51,14 +51,14 @@ async function generateReport(lang) {
   }
 
   try {
-    const res = await fetch('http://localhost:1234/v1/chat/completions', {
+    const res = await fetch((process.env.AI_URL || 'http://localhost:1234') + '/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: config.AI1.model,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.7, max_tokens: 200,
-        chat_template_kwargs: { enable_thinking: false }
+        signal: AbortSignal.timeout(5000), chat_template_kwargs: { enable_thinking: false }
       }),
     });
     if (!res.ok) throw new Error('AI offline');

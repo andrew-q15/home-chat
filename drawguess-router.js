@@ -32,10 +32,10 @@ function localBad(s) {
 }
 
 // config.AI1.url 拿不到就当没有 AI；夜间 AI 的教训：AI 不可用不能拖垮主流程
-let AI_URL = null;
+let AI_URL = process.env.AI_URL || null;
 try {
   const c = require('./config');
-  AI_URL = (c.AI1 && c.AI1.url) || (c.ai && c.ai.url) || (c.AI && c.AI.url) || null;
+  AI_URL = process.env.AI_URL || (c.AI1 && c.AI1.url) || (c.ai && c.ai.url) || (c.AI && c.AI.url) || null;
 } catch (e) { AI_URL = null; }
 
 // true=通过 / false=拒绝 / null=AI 不可用（降级为仅本地黑名单）
