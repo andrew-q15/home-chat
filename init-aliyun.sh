@@ -1,38 +1,48 @@
 #!/bin/bash
-# 橘域网 · 阿里云 ECS 初始化（ACL3 / x86_64），root 执行
+# 橘域网 · 阿里云轻量应用服务器 2核2G 初始化（Alibaba Cloud Linux，root 执行）
 set -e
-echo "1/9 系统更新"
+echo "1/10 系统更新"
 dnf update -y
-echo "2/9 基础工具"
-dnf install -y git curl wget vim htop tmux firewalld nginx cronie
-echo "3/9 Docker"
+echo "2/10 基础工具"
+dnf install -y git curl wget vim htop tmux nginx cronie
+echo "3/10 Docker"
 curl -fsSL https://get.docker.com | bash
+mkdir -p /etc/docker
+echo '{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"}}' > /etc/docker/daemon.json
 systemctl enable docker
 systemctl start docker
 docker version
-echo "4/9 Docker Compose"
-curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
-chmod +x /usr/local/bin/docker-compose
-docker-compose version
-echo "5/9 deploy 用户"
+echo "4/10 Compose 插件（可选，部署不依赖）"
+dnf install -y docker-compose-plugin || true
+echo "5/10 1G swap（2核2G 防 OOM）"
+if ! swapon --show | grep -q /swapfile; then
+  fallocate -l 1G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=1024
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  grep -q '/swapfile' /etc/fstab || echo '/swapfile swap swap defaults 0 0' >> /etc/fstab
+  sysctl -w vm.swappiness=10 >/dev/null
+fi
+free -h
+echo "6/10 deploy 用户 + 目录"
 useradd -m -s /bin/bash deploy 2>/dev/null || true
 usermod -aG docker deploy
 mkdir -p /home/deploy/data/backups /home/deploy/home-chat
-echo "6/9 Nginx 反代配置"
+echo "7/10 Nginx 反代"
 cp /root/orange-nginx.conf /etc/nginx/conf.d/orange.conf
 rm -f /etc/nginx/conf.d/default.conf
 nginx -t
 systemctl enable nginx
 systemctl restart nginx
-echo "7/9 防火墙"
-systemctl enable firewalld
-systemctl start firewalld
+echo "8/10 本机防火墙（云控制台「防火墙」页也要放行 22/80/443）"
+systemctl enable firewalld 2>/dev/null || true
+systemctl start firewalld 2>/dev/null || true
+firewall-cmd --permanent --add-service=ssh 2>/dev/null || true
+firewall-cmd --permanent --add-service=http 2>/dev/null || true
+firewall-cmd --permanent --add-service=https 2>/dev/null || true
+firewall-cmd --reload 2>/dev/null || true
+echo "9/10 crond（自愈 + 备份要用）"
 systemctl enable --now crond
-firewall-cmd --permanent --add-service=ssh
-firewall-cmd --permanent --add-service=http
-firewall-cmd --permanent --add-service=https
-firewall-cmd --reload
-echo "8/9 提示"
-echo "  接下来：scp 状态 JSON → bash /root/setup-ecs.sh"
+echo "10/10 完成"
+echo "  下一步：scp 状态 JSON → bash /root/setup-ecs.sh"
 echo "  然后：docker login registry.cn-hangzhou.aliyuncs.com -u <RAM用户名>"
-echo "9/9 完成"
