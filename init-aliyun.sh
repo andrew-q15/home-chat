@@ -6,7 +6,7 @@ dnf update -y
 echo "2/10 基础工具"
 dnf install -y git curl wget vim htop tmux nginx cronie
 echo "3/10 Docker"
-curl -fsSL https://get.docker.com | bash
+dnf install -y moby
 mkdir -p /etc/docker
 echo '{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"}}' > /etc/docker/daemon.json
 systemctl enable docker
@@ -15,7 +15,7 @@ docker version
 echo "4/10 Compose 插件（可选，部署不依赖）"
 dnf install -y docker-compose-plugin || true
 echo "5/10 1G swap（2核2G 防 OOM）"
-if ! swapon --show | grep -q /swapfile; then
+if ! grep -q '^/' /proc/swaps; then
   fallocate -l 1G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=1024
   chmod 600 /swapfile
   mkswap /swapfile

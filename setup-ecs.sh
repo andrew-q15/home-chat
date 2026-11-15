@@ -4,7 +4,7 @@ set -e
 mkdir -p /home/deploy/data/backups
 
 # swap 兜底（init 没跑成功时补齐）
-if ! swapon --show | grep -q /swapfile; then
+if ! grep -q '^/' /proc/swaps; then
   fallocate -l 1G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=1024
   chmod 600 /swapfile
   mkswap /swapfile
