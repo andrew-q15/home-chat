@@ -53,7 +53,7 @@ async function aiReview(word) {
         temperature: 0, max_tokens: 8, stream: false,
         chat_template_kwargs: { enable_thinking: false }
       }),
-      signal: AbortSignal.timeout(2000)
+      signal: AbortSignal.timeout(10000)
     });
     const j = await r.json();
     const t = String(((((j.choices || [])[0] || {}).message || {}).content) || '');

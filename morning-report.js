@@ -58,7 +58,7 @@ async function generateReport(lang) {
         model: config.AI1.model,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.7, max_tokens: 200,
-        signal: AbortSignal.timeout(5000), chat_template_kwargs: { enable_thinking: false }
+        signal: AbortSignal.timeout(30000), chat_template_kwargs: { enable_thinking: false }
       }),
     });
     if (!res.ok) throw new Error('AI offline');
