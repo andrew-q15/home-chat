@@ -112,5 +112,5 @@ jobs:
             done
             curl -sf -X POST http://127.0.0.1:3000/api/verify > /dev/null || (docker logs orange-chat && exit 1)
 
-            docker image prune -f
+            docker image prune -f --filter "until=168h"
             echo "done"
