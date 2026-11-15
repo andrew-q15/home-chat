@@ -41,6 +41,7 @@ try {
 // true=通过 / false=拒绝 / null=AI 不可用（降级为仅本地黑名单）
 async function aiReview(word) {
   if (!AI_URL) return null;
+  if (require("./ai-maintenance").OFF) return null;
   try {
     const url = String(AI_URL).replace(/\/+$/, '') + '/v1/chat/completions';
     const r = await fetch(url, {
@@ -272,10 +273,10 @@ module.exports = function setupDrawGuess(app, ctx) {
     const ai = await aiReview(word);
     if (ai === false) return res.json({ ok: false, msg: 'AI 判定不适合做题词' });
     data.customWords.push({ word: word, by: username, time: Date.now(),
-      ai: ai === true ? 'ai-passed' : 'ai-unavailable' });
+      ai: ai === true ? 'ai-passed' : 'ai-maintenance' });
     writeData(data);
     res.json({ ok: true, word: word,
-      msg: ai === null ? '本地审核通过（AI 暂不可用，已降级）' : 'AI 审核通过' });
+      msg: ai === null ? '本地审核通过（AI 维护中，暂不开放）' : 'AI 审核通过' });
   });
 
   console.log('  🎨 你画我猜擂台已挂载：/drawguess.html');

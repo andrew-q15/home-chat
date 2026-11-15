@@ -7,6 +7,7 @@ const LON = 108.94;
 
 async function getPoem() {
   try {
+    if (require("./ai-maintenance").OFF) throw new Error("维护中，暂不开放");
     const res = await fetch('https://v2.jinrishici.com/one.json');
     const data = await res.json();
     return data && data.data ? data.data.content : '';
@@ -16,6 +17,7 @@ async function getPoem() {
 async function getWeather() {
   try {
     const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + LAT + '&longitude=' + LON + '&current=temperature_2m,weather_code&timezone=Asia/Shanghai&forecast_days=1';
+    if (require("./ai-maintenance").OFF) throw new Error("维护中，暂不开放");
     const res = await fetch(url);
     return await res.json();
   } catch { return null; }
@@ -51,6 +53,7 @@ async function generateReport(lang) {
   }
 
   try {
+    if (require("./ai-maintenance").OFF) throw new Error("维护中，暂不开放");
     const res = await fetch((process.env.AI_URL || 'http://localhost:1234') + '/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -78,6 +81,7 @@ async function generateReport(lang) {
 
 async function sendReport(lang) {
   try {
+    if (require("./ai-maintenance").OFF) throw new Error("维护中，暂不开放");
     const res = await fetch(CHAT_SERVER + '/api/device/channels?key=' + DEVICE_KEY);
     const data = await res.json();
     if (!data.ok || !data.channels) return;

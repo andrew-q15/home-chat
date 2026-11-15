@@ -1,6 +1,9 @@
 module.exports = function mountAllFeatures(app, io, ctx) {
   console.log('  🚀 正在启动中央功能挂载系统...');
 
+  // 全局 AI 维护开关：默认停用，AI 类接口统一返回维护文案
+  try { app.use(require('./ai-maintenance').guard); } catch (e) { console.error('[AI维护] 挂载失败:', e.message); }
+
   // 你画我猜擂台（实时画板 + 自定义题词审核 + 赏金结算）
   try {
     const setupDrawGuess = require('./drawguess-router');
